@@ -4,6 +4,10 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+# ЭТИ 3 СТРОЧКИ ОТМЕНЯЮТ СТАРЫЕ СБОРКИ ПРИ НОВОМ КОММИТЕ
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
