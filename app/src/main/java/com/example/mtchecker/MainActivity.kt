@@ -16,6 +16,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.text.HtmlCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
@@ -32,12 +34,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var networkText: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var checkButton: Button
+    private lateinit var stopButton: Button
     private lateinit var loadFileButton: Button
 
     private val url = "https://raw.githubusercontent.com/SoliSpirit/mtproto/master/all_proxies.txt"
     private val prefsName = "MtCheckerPrefs"
+    
+    private var checkJob: Job? = null
+    private var workingLinks = mutableListOf<String>()
+    private var currentHeader = ""
 
-    // Обработчик выбора файла
     private val getContent = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { processFile(it) }
     }
@@ -51,6 +57,7 @@ class MainActivity : AppCompatActivity() {
         networkText = findViewById(R.id.networkText)
         progressBar = findViewById(R.id.progressBar)
         checkButton = findViewById(R.id.checkButton)
+        stopButton = findViewById(R.id.stopButton)
         loadFileButton = findViewById(R.id.loadFileButton)
         val copyButton = findViewById<Button>(R.id.copyButton)
 
@@ -59,6 +66,10 @@ class MainActivity : AppCompatActivity() {
 
         checkButton.setOnClickListener {
             startChecking(url)
+        }
+
+        stopButton.setOnClickListener {
+            stopChecking()
         }
 
         loadFileButton.setOnClickListener {
@@ -71,6 +82,19 @@ class MainActivity : AppCompatActivity() {
             clipboard.setPrimaryClip(clip)
             Toast.makeText(this, "Скопировано!", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun stopChecking() {
+        checkJob?.cancel()
+        statusText.text = "Процесс остановлен пользователем"
+        resetButtons()
+        saveResult(resultText.text.toString())
+    }
+
+    private fun resetButtons() {
+        checkButton.isEnabled = true
+        loadFileButton.isEnabled = true
+        stopButton.isEnabled = false
     }
 
     private fun getNetworkType(): String {
@@ -100,17 +124,17 @@ class MainActivity : AppCompatActivity() {
     private fun startChecking(targetUrl: String) {
         checkButton.isEnabled = false
         loadFileButton.isEnabled = false
+        stopButton.isEnabled = true
         resultText.text = ""
         progressBar.progress = 0
         statusText.text = "Скачиваю список..."
 
-        CoroutineScope(Dispatchers.IO).launch {
+        checkJob = CoroutineScope(Dispatchers.IO).launch {
             try {
                 val connection = URL(targetUrl).openConnection() as HttpURLConnection
                 connection.requestMethod = "GET"
                 connection.connect()
                 
-                // Получаем дату обновления файла (если сервер отдает)
                 val lastModified = connection.getHeaderField("Last-Modified") ?: "Дата неизвестна"
                 val text = connection.inputStream.bufferedReader().use { it.readText() }
                 
@@ -120,8 +144,7 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     statusText.text = "Ошибка сети: ${e.message}"
-                    checkButton.isEnabled = true
-                    loadFileButton.isEnabled = true
+                    resetButtons()
                 }
             }
         }
@@ -137,53 +160,73 @@ class MainActivity : AppCompatActivity() {
 
         if (proxies.isEmpty()) {
             statusText.text = "Прокси не найдены в источнике"
-            checkButton.isEnabled = true
-            loadFileButton.isEnabled = true
+            resetButtons()
             return
         }
 
         statusText.text = "Проверяю ${proxies.size} серверов..."
         progressBar.max = proxies.size
+        workingLinks.clear()
 
-        CoroutineScope(Dispatchers.IO).launch {
-            val working = mutableListOf<String>()
-            var checkedCount = 0
-            val networkType = getNetworkType()
+        val networkType = getNetworkType()
+        val dateStr = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+        currentHeader = "<b>Источник:</b> $sourceName<br><b>Сеть:</b> $networkType<br><b>Дата опроса:</b> $dateStr<br><b>Найдено:</b> <span id='count'>0</span> из ${proxies.size}<br><br>"
 
-            for ((server, port) in proxies) {
-                if (isServerAlive(server, port)) {
-                    val originalLine = text.lines().find { it.contains("server=$server") && it.contains("port=$port") }
-                    if (originalLine != null) working.add(originalLine)
-                }
-                checkedCount++
-                
-                // Обновляем прогресс каждые 5 проверок, чтобы не нагружать интерфейс
-                if (checkedCount % 5 == 0 || checkedCount == proxies.size) {
-                    val progress = checkedCount
-                    withContext(Dispatchers.Main) {
-                        progressBar.progress = progress
-                        statusText.text = "Проверено $progress из ${proxies.size}..."
-                    }
+        // Если кнопка "Проверить" была нажата, запускаем новый Job, иначе используем текущий из processFile
+        val currentJob = checkJob ?: CoroutineScope(Dispatchers.IO).launch {}.also { checkJob = it }
+
+        // Перезаписываем Job для локального файла, если он не был создан
+        if (checkJob?.isActive != true) {
+             checkJob = CoroutineScope(Dispatchers.IO).launch {
+                 performChecks(proxies, text)
+             }
+        } else {
+             // Если мы внутри уже запущенного checkJob (из startChecking), просто продолжаем
+             CoroutineScope(Dispatchers.IO).launch {
+                 performChecks(proxies, text)
+             }
+        }
+    }
+
+    private suspend fun performChecks(proxies: List<Pair<String, Int>>, rawText: String) {
+        var checkedCount = 0
+        
+        for ((server, port) in proxies) {
+            if (!checkJob!!.isActive) break // Проверяем, не нажали ли "Стоп"
+
+            if (isServerAlive(server, port)) {
+                val originalLine = rawText.lines().find { it.contains("server=$server") && it.contains("port=$port") }
+                if (originalLine != null) {
+                    workingLinks.add(originalLine)
+                    updateLinksOnScreen(proxies.size) // Мгновенно выводим на экран
                 }
             }
-
-            withContext(Dispatchers.Main) {
-                val dateStr = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
-                val header = "<b>Источник:</b> $sourceName<br><b>Сеть:</b> $networkType<br><b>Дата опроса:</b> $dateStr<br><b>Найдено:</b> ${working.size} из ${proxies.size}<br><br>"
-                
-                // Делаем ссылки кликабельными через HTML
-                val linksHtml = working.joinToString("<br><br>") { link -> 
-                    "<a href=\"$link\">$link</a>" 
+            checkedCount++
+            
+            if (checkedCount % 5 == 0 || checkedCount == proxies.size) {
+                val progress = checkedCount
+                val total = proxies.size
+                withContext(Dispatchers.Main) {
+                    progressBar.progress = progress
+                    statusText.text = "Проверено $progress из $total..."
                 }
-                resultText.text = HtmlCompat.fromHtml(header + linksHtml, HtmlCompat.FROM_HTML_MODE_LEGACY)
-                
-                statusText.text = "Готово!"
-                checkButton.isEnabled = true
-                loadFileButton.isEnabled = true
-                
-                // Сохраняем результат
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            if (checkJob?.isActive == true) {
+                statusText.text = "Готово! Найдено: ${workingLinks.size}"
+                resetButtons()
                 saveResult(resultText.text.toString())
             }
+        }
+    }
+
+    private suspend fun updateLinksOnScreen(total: Int) {
+        withContext(Dispatchers.Main) {
+            val headerWithCount = currentHeader.replace("<span id='count'>0</span>", "<span style='color:#D81B60;'><b>${workingLinks.size}</b></span>")
+            val linksHtml = workingLinks.joinToString("<br><br>") { link -> "<a href=\"$link\">$link</a>" }
+            resultText.text = HtmlCompat.fromHtml(headerWithCount + linksHtml, HtmlCompat.FROM_HTML_MODE_LEGACY)
         }
     }
 
