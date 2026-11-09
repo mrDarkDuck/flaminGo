@@ -59,16 +59,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val requestPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { 
-        updateNetworkText()
-        if (!CheckService.isRunning) loadSavedResult()
+        try {
+            updateNetworkText()
+            if (!CheckService.isRunning) loadSavedResult()
+        } catch (e: Exception) {
+            statusText.text = "Ошибка разрешений"
+        }
     }
 
     private val connectivityManager by lazy { getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager }
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             runOnUiThread {
-                updateNetworkText()
-                if (!CheckService.isRunning) loadSavedResult()
+                try {
+                    updateNetworkText()
+                    if (!CheckService.isRunning) loadSavedResult()
+                } catch (e: Exception) {}
             }
         }
     }
@@ -110,62 +116,66 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        statusText = findViewById(R.id.statusText)
-        networkText = findViewById(R.id.networkText)
-        progressBar = findViewById(R.id.progressBar)
-        startButton = findViewById(R.id.startButton)
-        stopButton = findViewById(R.id.stopButton)
-        recheckButton = findViewById(R.id.recheckButton)
-        updateButton = findViewById(R.id.updateButton)
-        chronometer = findViewById(R.id.chronometer)
-        radioGithub = findViewById(R.id.radioGithub)
-        radioCustom = findViewById(R.id.radioCustom)
-        recyclerView = findViewById(R.id.recyclerView)
-        versionText = findViewById(R.id.versionText)
-        
-        // Формат версии: V1.65
-        versionText.text = "V${BuildConfig.VERSION_NAME}"
+        try {
+            statusText = findViewById(R.id.statusText)
+            networkText = findViewById(R.id.networkText)
+            progressBar = findViewById(R.id.progressBar)
+            startButton = findViewById(R.id.startButton)
+            stopButton = findViewById(R.id.stopButton)
+            recheckButton = findViewById(R.id.recheckButton)
+            updateButton = findViewById(R.id.updateButton)
+            chronometer = findViewById(R.id.chronometer)
+            radioGithub = findViewById(R.id.radioGithub)
+            radioCustom = findViewById(R.id.radioCustom)
+            recyclerView = findViewById(R.id.recyclerView)
+            versionText = findViewById(R.id.versionText)
+            
+            versionText.text = "V${BuildConfig.VERSION_NAME}"
 
-        adapter = ProxyAdapter(mutableListOf())
-        recyclerView.layoutManager = LinearLayoutManager(this)
-        recyclerView.adapter = adapter
+            adapter = ProxyAdapter(mutableListOf())
+            recyclerView.layoutManager = LinearLayoutManager(this)
+            recyclerView.adapter = adapter
 
-        checkAndRequestPermissions()
+            checkAndRequestPermissions()
 
-        radioGithub.setOnClickListener { updateNetworkText() }
-        radioCustom.setOnClickListener { getContent.launch("text/plain") }
+            radioGithub.setOnClickListener { updateNetworkText() }
+            radioCustom.setOnClickListener { getContent.launch("text/plain") }
 
-        startButton.setOnClickListener { startChecking() }
-        stopButton.setOnClickListener { stopChecking() }
-        recheckButton.setOnClickListener { startRecheck() }
-        
-        findViewById<Button>(R.id.copyAllButton).setOnClickListener {
-            val allLinks = adapter.items.joinToString("\n\n") { it.link }
-            if (allLinks.isNotEmpty()) {
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("Proxies", allLinks))
-                Toast.makeText(this, "Скопировано!", Toast.LENGTH_SHORT).show()
+            startButton.setOnClickListener { startChecking() }
+            stopButton.setOnClickListener { stopChecking() }
+            recheckButton.setOnClickListener { startRecheck() }
+            
+            findViewById<Button>(R.id.copyAllButton).setOnClickListener {
+                val allLinks = adapter.items.joinToString("\n\n") { it.link }
+                if (allLinks.isNotEmpty()) {
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Proxies", allLinks))
+                    Toast.makeText(this, "Скопировано!", Toast.LENGTH_SHORT).show()
+                }
             }
+
+            findViewById<Button>(R.id.settingsButton).setOnClickListener { showSettingsDialog() }
+
+            updateButton.setOnClickListener {
+                latestApkUrl?.let { downloadAndInstallApk(it) }
+            }
+
+            findViewById<Button>(R.id.exitButton).setOnClickListener {
+                stopService(Intent(this, CheckService::class.java))
+                saveResult(adapter.items, CheckService.currentNetworkId.ifEmpty { getNetworkIdentifier() })
+                finishAffinity()
+            }
+
+            findViewById<Button>(R.id.whatsNewButton).setOnClickListener {
+                val changelogUrl = "https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/CHANGELOG.md"
+                showChangelogDialog(changelogUrl)
+            }
+
+            checkForUpdates(silent = true)
+            
+        } catch (e: Exception) {
+            Toast.makeText(this, "Ошибка инициализации UI: ${e.message}", Toast.LENGTH_LONG).show()
         }
-
-        findViewById<Button>(R.id.settingsButton).setOnClickListener { showSettingsDialog() }
-
-        updateButton.setOnClickListener {
-            latestApkUrl?.let { downloadAndInstallApk(it) }
-        }
-
-        findViewById<Button>(R.id.exitButton).setOnClickListener {
-            stopService(Intent(this, CheckService::class.java))
-            saveResult(adapter.items, CheckService.currentNetworkId.ifEmpty { getNetworkIdentifier() })
-            finishAffinity()
-        }
-
-        findViewById<Button>(R.id.whatsNewButton).setOnClickListener {
-            val changelogUrl = "https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/CHANGELOG.md"
-            showChangelogDialog(changelogUrl)
-        }
-
-        checkForUpdates(silent = true)
     }
 
     // --- ЛОГИКА АВТООБНОВЛЕНИЯ ---
@@ -249,7 +259,7 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-    // --- СТАРЫЕ ФУНКЦИИ ---
+    // --- ОСТАЛЬНЫЕ ФУНКЦИИ ---
     private fun checkAndRequestPermissions() {
         val permissions = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.READ_PHONE_STATE)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -283,31 +293,33 @@ class MainActivity : AppCompatActivity() {
         connectivityManager.registerDefaultNetworkCallback(networkCallback)
         
         if (::adapter.isInitialized) {
-            updateNetworkText()
-            if (CheckService.isRunning || CheckService.currentTotal > 0) {
-                adapter.clear()
-                adapter.items.addAll(CheckService.foundProxies)
-                adapter.notifyDataSetChanged()
-                
-                progressBar.max = CheckService.currentTotal
-                progressBar.progress = CheckService.currentChecked
-                
-                if (CheckService.isRunning) {
-                    statusText.text = getString(R.string.status_checking, CheckService.currentChecked, CheckService.currentTotal)
-                    startButton.isEnabled = false
-                    stopButton.isEnabled = true
-                    recheckButton.isEnabled = false
-                    radioGithub.isEnabled = false
-                    radioCustom.isEnabled = false
-                    chronometer.visibility = android.view.View.VISIBLE
+            try {
+                updateNetworkText()
+                if (CheckService.isRunning || CheckService.currentTotal > 0) {
+                    adapter.clear()
+                    adapter.items.addAll(CheckService.foundProxies)
+                    adapter.notifyDataSetChanged()
+                    
+                    progressBar.max = CheckService.currentTotal
+                    progressBar.progress = CheckService.currentChecked
+                    
+                    if (CheckService.isRunning) {
+                        statusText.text = getString(R.string.status_checking, CheckService.currentChecked, CheckService.currentTotal)
+                        startButton.isEnabled = false
+                        stopButton.isEnabled = true
+                        recheckButton.isEnabled = false
+                        radioGithub.isEnabled = false
+                        radioCustom.isEnabled = false
+                        chronometer.visibility = android.view.View.VISIBLE
+                    } else {
+                        statusText.text = getString(R.string.status_done, adapter.itemCount)
+                        resetButtons()
+                        saveResult(adapter.items, CheckService.currentNetworkId.ifEmpty { getNetworkIdentifier() })
+                    }
                 } else {
-                    statusText.text = getString(R.string.status_done, adapter.itemCount)
-                    resetButtons()
-                    saveResult(adapter.items, CheckService.currentNetworkId.ifEmpty { getNetworkIdentifier() })
+                    loadSavedResult()
                 }
-            } else {
-                loadSavedResult()
-            }
+            } catch (e: Exception) {}
         }
     }
 
@@ -517,7 +529,6 @@ class MainActivity : AppCompatActivity() {
         
         adapter.clear()
         
-        // СБРАСЫВАЕМ ПРОГРЕСС-БАР
         progressBar.max = 100
         progressBar.progress = 0
         
