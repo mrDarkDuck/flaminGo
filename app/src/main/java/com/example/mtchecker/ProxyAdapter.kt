@@ -3,6 +3,7 @@ package com.example.mtchecker
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -27,7 +28,15 @@ class ProxyAdapter(val items: MutableList<ProxyItem>) : RecyclerView.Adapter<Pro
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val item = items[position]
+        
+        // Раскрашиваем текст в зависимости от пинга
+        val color = when {
+            item.ping < 150 -> Color.parseColor("#4CAF50") // Зеленый (отлично)
+            item.ping < 400 -> Color.parseColor("#FFC107") // Желтый (средне)
+            else -> Color.parseColor("#F44336")            // Красный (медленно)
+        }
         holder.pingText.text = "${item.displayName} | ${item.ping} ms"
+        holder.pingText.setTextColor(color)
         
         holder.copyBtn.setOnClickListener {
             val clipboard = it.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -39,9 +48,16 @@ class ProxyAdapter(val items: MutableList<ProxyItem>) : RecyclerView.Adapter<Pro
 
     override fun getItemCount() = items.size
 
+    // Умная вставка: ищем место, где пинг больше нашего, и вставляем туда
     fun addItem(item: ProxyItem) {
-        items.add(item)
-        notifyItemInserted(items.size - 1)
+        val index = items.indexOfFirst { it.ping > item.ping }
+        if (index == -1) {
+            items.add(item)
+            notifyItemInserted(items.size - 1)
+        } else {
+            items.add(index, item)
+            notifyItemInserted(index)
+        }
     }
 
     fun clear() {
