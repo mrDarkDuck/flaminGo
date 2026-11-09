@@ -46,6 +46,7 @@
             android:paddingEnd="8dp"/>
     </LinearLayout>
 
+    <!-- Описание приложения -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -54,6 +55,7 @@
         android:textColor="#AAAAAA"
         android:layout_marginBottom="12dp"/>
 
+    <!-- Выбор источника -->
     <RadioGroup
         android:id="@+id/sourceGroup"
         android:layout_width="match_parent"
@@ -74,6 +76,7 @@
             android:text="@string/source_custom"/>
     </RadioGroup>
 
+    <!-- Информация о сети -->
     <TextView
         android:id="@+id/networkText"
         android:layout_width="match_parent"
@@ -82,6 +85,7 @@
         android:textColor="#666666"
         android:layout_marginBottom="4dp"/>
 
+    <!-- Статус и таймер -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -106,6 +110,7 @@
             android:visibility="gone"/>
     </LinearLayout>
 
+    <!-- Прогресс-бар -->
     <ProgressBar
         android:id="@+id/progressBar"
         style="?android:attr/progressBarStyleHorizontal"
@@ -115,6 +120,7 @@
         android:progress="0"
         android:layout_marginBottom="8dp"/>
 
+    <!-- Кнопки Старт и Стоп -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -138,7 +144,7 @@
             android:layout_marginStart="4dp"/>
     </LinearLayout>
 
-    <!-- Кнопка копирования теперь на всю ширину -->
+    <!-- Кнопка копирования всего списка (на всю ширину) -->
     <Button
         android:id="@+id/copyAllButton"
         android:layout_width="match_parent"
@@ -146,6 +152,7 @@
         android:text="@string/btn_copy_all"
         android:layout_marginBottom="8dp"/>
 
+    <!-- Таблица с результатами -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
