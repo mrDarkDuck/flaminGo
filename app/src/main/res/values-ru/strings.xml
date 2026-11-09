@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">FlaminGo</string>
+    <string name="source_github">Список GitHub</string>
+    <string name="source_custom">Свой список (txt)</string>
+    <string name="btn_start">Старт</string>
+    <string name="btn_stop">Стоп</string>
+    <string name="btn_exit">Выход</string>
+    <string name="btn_copy_all">Копировать всё</string>
+    <string name="btn_copy">Копия</string>
+    <string name="status_ready">Готов к работе</string>
+    <string name="status_checking">Проверено: %1$d / %2$d</string>
+    <string name="status_done">Готово! Найдено: %1$d</string>
+    <string name="version_label">Версия: %1$s</string>
+    <string name="network_wifi">Wi-Fi</string>
+    <string name="network_cell">Мобильная</string>
+</resources>
