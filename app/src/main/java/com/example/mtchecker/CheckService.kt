@@ -53,12 +53,16 @@ class CheckService : Service() {
             try {
                 val text = if (isCustom || isReCheck) customText!! else {
                     val conn = URL(url).openConnection() as HttpURLConnection
+                    conn.connectTimeout = 10000 // 10 секунд на подключение
+                    conn.readTimeout = 10000    // 10 секунд на чтение
+                    conn.requestMethod = "GET"
                     conn.connect()
                     conn.inputStream.bufferedReader().use { it.readText() }
                 }
                 performChecks(text, limit, onlyFast)
             } catch (e: Exception) {
-                broadcastError(e.message ?: "Unknown error")
+                // Если произошла ошибка сети (например, блокировка провайдера)
+                broadcastError(e.message ?: "Ошибка загрузки списка (возможно, заблокирован провайдером)")
                 stopSelf()
             }
         }
@@ -75,17 +79,17 @@ class CheckService : Service() {
         }.toList().distinct()
 
         if (proxies.isEmpty()) {
-            broadcastError("No proxies found")
+            broadcastError("Прокси не найдены. Возможно, список пуст или заблокирован.")
             stopSelf()
             return
         }
 
         currentTotal = proxies.size
+        broadcastProgress(0, currentTotal) // Отправляем 0/XX, чтобы интерфейс понял размер списка
 
         for ((server, port) in proxies) {
             if (!coroutineContext.isActive) break
             
-            // Останавливаемся, если достигли лимита
             if (limit > 0 && foundProxies.size >= limit) {
                 break
             }
@@ -94,7 +98,6 @@ class CheckService : Service() {
             if (isServerAlive(server, port)) {
                 val ping = System.currentTimeMillis() - startTime
                 
-                // Фильтр "только быстрые" (меньше 150 мс)
                 if (!(onlyFast && ping >= 150)) {
                     val originalLine = text.lines().find { it.contains("server=$server") && it.contains("port=$port") }
                     if (originalLine != null) {
