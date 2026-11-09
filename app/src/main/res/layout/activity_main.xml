@@ -5,7 +5,7 @@
     android:orientation="vertical"
     android:padding="12dp">
 
-    <!-- Верхняя панель: Версия, Что нового, Выход -->
+    <!-- Верхняя панель: Версия, Настройки, Что нового, Выход -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -22,6 +22,18 @@
             android:textColor="#888888"/>
 
         <Button
+            android:id="@+id/settingsButton"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_settings"
+            android:textColor="#D81B60"
+            android:textSize="12sp"
+            android:minWidth="0dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"/>
+
+        <Button
             android:id="@+id/whatsNewButton"
             style="?android:attr/borderlessButtonStyle"
             android:layout_width="wrap_content"
@@ -33,17 +45,16 @@
             android:paddingStart="8dp"
             android:paddingEnd="8dp"/>
 
+        <!-- Кнопка выхода теперь с обычным фоном -->
         <Button
             android:id="@+id/exitButton"
-            style="?android:attr/borderlessButtonStyle"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="40dp"
             android:text="✕"
-            android:textColor="#888888"
-            android:textSize="18sp"
-            android:minWidth="0dp"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"/>
+            android:textSize="16sp"
+            android:padding="0dp"
+            android:minWidth="40dp"
+            android:layout_marginStart="4dp"/>
     </LinearLayout>
 
     <!-- Описание приложения -->
@@ -144,13 +155,28 @@
             android:layout_marginStart="4dp"/>
     </LinearLayout>
 
-    <!-- Кнопка копирования всего списка (на всю ширину) -->
-    <Button
-        android:id="@+id/copyAllButton"
+    <!-- Кнопки Копировать и ReCheck -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/btn_copy_all"
-        android:layout_marginBottom="8dp"/>
+        android:orientation="horizontal"
+        android:layout_marginBottom="8dp">
+        <Button
+            android:id="@+id/copyAllButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/btn_copy_all"
+            android:layout_marginEnd="4dp"/>
+        <Button
+            android:id="@+id/recheckButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/btn_recheck"
+            android:enabled="false"
+            android:layout_marginStart="4dp"/>
+    </LinearLayout>
 
     <!-- Таблица с результатами -->
     <androidx.recyclerview.widget.RecyclerView
