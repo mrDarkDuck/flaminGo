@@ -13,4 +13,16 @@
     <string name="version_label">Version: %1$s | Build: %2$s</string>
     <string name="network_wifi">Wi-Fi</string>
     <string name="network_cell">Mobile</string>
+    <string name="btn_settings">Settings</string>
+    <string name="btn_recheck">ReCheck</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_url_label">Official List URL:</string>
+    <string name="settings_depth_label">Check depth:</string>
+    <string name="settings_only_fast">Show only fast proxies (ping &lt; 150ms)</string>
+    <string name="depth_all">All</string>
+    <string name="depth_1">Until 1 working</string>
+    <string name="depth_3">Until 3 working</string>
+    <string name="depth_5">Until 5 working</string>
+    <string name="settings_save">Save</string>
+    <string name="settings_cancel">Cancel</string>
 </resources>
