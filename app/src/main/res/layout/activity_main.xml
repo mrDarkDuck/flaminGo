@@ -5,13 +5,54 @@
     android:orientation="vertical"
     android:padding="12dp">
 
-    <TextView
-        android:id="@+id/versionText"
+    <!-- Верхняя панель: Версия, Что нового, Выход -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:id="@+id/versionText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="12sp"
+            android:textColor="#888888"/>
+
+        <Button
+            android:id="@+id/whatsNewButton"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Что нового?"
+            android:textColor="#D81B60"
+            android:textSize="12sp"
+            android:minWidth="0dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"/>
+
+        <Button
+            android:id="@+id/exitButton"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="✕"
+            android:textColor="#888888"
+            android:textSize="18sp"
+            android:minWidth="0dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"/>
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Проверка доступности MTProto прокси для Telegram. Выберите источник, нажмите Старт и скопируйте рабочие ссылки."
         android:textSize="12sp"
-        android:textColor="#888888"
-        android:layout_marginBottom="8dp"/>
+        android:textColor="#AAAAAA"
+        android:layout_marginBottom="12dp"/>
 
     <RadioGroup
         android:id="@+id/sourceGroup"
@@ -97,29 +138,14 @@
             android:layout_marginStart="4dp"/>
     </LinearLayout>
 
-    <LinearLayout
+    <!-- Кнопка копирования теперь на всю ширину -->
+    <Button
+        android:id="@+id/copyAllButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="8dp">
-        <Button
-            android:id="@+id/copyAllButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/btn_copy_all"
-            android:layout_marginEnd="4dp"/>
-        <Button
-            android:id="@+id/exitButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/btn_exit"
-            android:backgroundTint="#424242"
-            android:layout_marginStart="4dp"/>
-    </LinearLayout>
+        android:text="@string/btn_copy_all"
+        android:layout_marginBottom="8dp"/>
 
-    <!-- Таблица для результатов -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
