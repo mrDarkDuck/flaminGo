@@ -18,7 +18,10 @@ android {
         versionName "1.0"
 
         // Автоматическая генерация времени сборки
-        def buildTime = new SimpleDateFormat("dd.MM.yyyy HH:mm").format(new Date())
+                // Добавляем правильный часовой пояс
+        def sdf = new SimpleDateFormat("dd.MM.yyyy HH:mm")
+        sdf.setTimeZone(TimeZone.getTimeZone("Europe/Moscow"))
+        def buildTime = sdf.format(new Date())
         buildConfigField "String", "BUILD_TIME", "\"${buildTime}\""
     }
 
