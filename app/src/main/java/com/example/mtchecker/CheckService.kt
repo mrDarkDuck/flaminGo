@@ -11,13 +11,23 @@ import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
-import kotlin.coroutines.coroutineContext // <-- ДОБАВЛЕН ИМПОРТ
+import kotlin.coroutines.coroutineContext
 
 class CheckService : Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var checkJob: Job? = null
     private val CHANNEL_ID = "ProxyCheckChannel"
     private val NOTIFICATION_ID = 1
+
+    // СОХРАНЯЕМ СОСТОЯНИЕ ЗДЕСЬ, чтобы MainActivity могла его прочитать
+    companion object {
+        var isRunning = false
+        var currentChecked = 0
+        var currentTotal = 0
+        var currentNetworkId = ""
+        val foundProxies = mutableListOf<ProxyItem>()
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -29,21 +39,24 @@ class CheckService : Service() {
         val customText = intent?.getStringExtra("customText")
         val isCustom = !customText.isNullOrEmpty()
 
-        // Запускаем сервис как Foreground (появляется в шторке)
+        isRunning = true
+        currentChecked = 0
+        currentTotal = 0
+        foundProxies.clear()
+
         startForeground(NOTIFICATION_ID, buildNotification("Подготовка к проверке..."))
 
-        serviceScope.launch {
+        checkJob?.cancel()
+        checkJob = serviceScope.launch {
             try {
                 val text = if (isCustom) customText!! else {
                     val conn = URL(url).openConnection() as HttpURLConnection
                     conn.connect()
                     conn.inputStream.bufferedReader().use { it.readText() }
                 }
-                
                 performChecks(text)
-                
             } catch (e: Exception) {
-                sendBroadcast(Intent("CHECK_ERROR").putExtra("error", e.message))
+                broadcastError(e.message ?: "Unknown error")
                 stopSelf()
             }
         }
@@ -60,15 +73,14 @@ class CheckService : Service() {
         }.toList().distinct()
 
         if (proxies.isEmpty()) {
-            sendBroadcast(Intent("CHECK_ERROR").putExtra("error", "No proxies found"))
+            broadcastError("No proxies found")
             stopSelf()
             return
         }
 
-        var checkedCount = 0
-        
+        currentTotal = proxies.size
+
         for ((server, port) in proxies) {
-            // ИСПРАВЛЕНИЕ ЗДЕСЬ: используем coroutineContext.isActive
             if (!coroutineContext.isActive) break
 
             val startTime = System.currentTimeMillis()
@@ -77,30 +89,22 @@ class CheckService : Service() {
                 val originalLine = text.lines().find { it.contains("server=$server") && it.contains("port=$port") }
                 
                 if (originalLine != null) {
-                    // Отправляем найденный прокси в MainActivity
-                    val resultIntent = Intent("CHECK_RESULT")
-                    resultIntent.putExtra("link", originalLine)
-                    resultIntent.putExtra("displayName", "$server:$port")
-                    resultIntent.putExtra("ping", ping)
-                    sendBroadcast(resultIntent)
+                    val item = ProxyItem(originalLine, "$server:$port", ping)
+                    foundProxies.add(item)
+                    broadcastResult(item)
                 }
             }
-            checkedCount++
+            currentChecked++
             
-            if (checkedCount % 5 == 0 || checkedCount == proxies.size) {
-                // Обновляем прогресс в MainActivity и в шторке
-                val progressIntent = Intent("CHECK_PROGRESS")
-                progressIntent.putExtra("checked", checkedCount)
-                progressIntent.putExtra("total", proxies.size)
-                sendBroadcast(progressIntent)
-                
-                updateNotification("Проверено $checkedCount из ${proxies.size}...")
+            if (currentChecked % 5 == 0 || currentChecked == proxies.size) {
+                broadcastProgress(currentChecked, proxies.size)
+                updateNotification("Проверено $currentChecked из ${proxies.size}...")
             }
         }
 
-        // ИСПРАВЛЕНИЕ ЗДЕСЬ: используем coroutineContext.isActive
         if (coroutineContext.isActive) {
-            sendBroadcast(Intent("CHECK_FINISHED"))
+            isRunning = false
+            broadcastFinished()
         }
         stopSelf()
     }
@@ -118,12 +122,46 @@ class CheckService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        checkJob?.cancel()
         serviceScope.cancel()
+        isRunning = false
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    // --- ЛОГИКА УВЕДОМЛЕНИЙ ---
+    // --- ОТПРАВКА СИГНАЛОВ (С УКАЗАНИЕМ ПАКЕТА) ---
+
+    private fun broadcastProgress(checked: Int, total: Int) {
+        val intent = Intent("CHECK_PROGRESS")
+        intent.putExtra("checked", checked)
+        intent.putExtra("total", total)
+        intent.setPackage(packageName) // <-- Обязательно для Android 13+
+        sendBroadcast(intent)
+    }
+
+    private fun broadcastResult(item: ProxyItem) {
+        val intent = Intent("CHECK_RESULT")
+        intent.putExtra("link", item.link)
+        intent.putExtra("displayName", item.displayName)
+        intent.putExtra("ping", item.ping)
+        intent.setPackage(packageName)
+        sendBroadcast(intent)
+    }
+
+    private fun broadcastFinished() {
+        val intent = Intent("CHECK_FINISHED")
+        intent.setPackage(packageName)
+        sendBroadcast(intent)
+    }
+
+    private fun broadcastError(error: String) {
+        val intent = Intent("CHECK_ERROR")
+        intent.putExtra("error", error)
+        intent.setPackage(packageName)
+        sendBroadcast(intent)
+    }
+
+    // --- УВЕДОМЛЕНИЯ ---
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
