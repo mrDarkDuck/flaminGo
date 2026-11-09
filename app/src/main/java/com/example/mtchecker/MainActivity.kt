@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -20,6 +21,9 @@ import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -73,7 +77,7 @@ class MainActivity : AppCompatActivity() {
         // Загружаем прошлый результат
         loadSavedResult()
 
-        // Слушатели кнопок
+        // Слушатели кнопок и переключателей
         radioGithub.setOnClickListener { 
             networkText.text = getString(R.string.source_github) + " | ${getNetworkType()}" 
         }
@@ -93,19 +97,19 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Новая кнопка Выхода (крестик)
+        // Кнопка Выхода (крестик)
         findViewById<Button>(R.id.exitButton).setOnClickListener {
-            checkJob?.cancel() // Останавливаем проверку, если идет
-            saveResult(adapter.items) // СОХРАНЯЕМ ПЕРЕД ВЫХОДОМ
+            checkJob?.cancel()
+            saveResult(adapter.items)
             finishAffinity()
         }
 
         // Кнопка "Что нового"
         findViewById<Button>(R.id.whatsNewButton).setOnClickListener {
-            // Ссылка на сырой файл CHANGELOG.md в вашем репозитории
             val changelogUrl = "https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/CHANGELOG.md"
             showChangelogDialog(changelogUrl)
         }
+    }
 
     // Сохраняем список, если приложение свернули или убили системой
     override fun onStop() {
@@ -260,15 +264,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // СОХРАНЕНИЕ РЕЗУЛЬТАТА И ДАТЫ
     private fun saveResult(items: List<ProxyItem>) {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val savedString = items.joinToString("|") { "${it.link};;${it.displayName};;${it.ping}" }
-        prefs.edit().putString("last_result", savedString).apply()
+        
+        // Генерируем текущую дату
+        val dateStr = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
+        
+        prefs.edit()
+            .putString("last_result", savedString)
+            .putString("last_check_date", dateStr)
+            .apply()
     }
 
+    // ЗАГРУЗКА РЕЗУЛЬТАТА И ДАТЫ ПРИ СТАРТЕ
     private fun loadSavedResult() {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val saved = prefs.getString("last_result", "") ?: ""
+        val lastDate = prefs.getString("last_check_date", "") ?: ""
+        
         if (saved.isNotEmpty()) {
             val items = saved.split("|").mapNotNull { 
                 val parts = it.split(";;")
@@ -276,11 +291,15 @@ class MainActivity : AppCompatActivity() {
             }
             adapter.items.addAll(items)
             adapter.notifyDataSetChanged()
+            
+            // Выводим дату последней проверки, если она есть
+            if (lastDate.isNotEmpty()) {
+                statusText.text = "Последняя проверка: $lastDate"
+            }
         }
     }
-    // Функция для скачивания и показа окна с изменениями
+
     private fun showChangelogDialog(url: String) {
-        // Показываем временное сообщение, что идет загрузка
         val loadingToast = Toast.makeText(this, "Загрузка...", Toast.LENGTH_SHORT)
         loadingToast.show()
 
@@ -288,7 +307,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 val text = URL(url).readText()
                 withContext(Dispatchers.Main) {
-                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                    AlertDialog.Builder(this@MainActivity)
                         .setTitle("Что нового?")
                         .setMessage(text)
                         .setPositiveButton("ОК", null)
@@ -296,7 +315,7 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                    AlertDialog.Builder(this@MainActivity)
                         .setTitle("Что нового?")
                         .setMessage("Не удалось загрузить список изменений.\nПроверьте интернет.")
                         .setPositiveButton("ОК", null)
@@ -305,5 +324,4 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    
 }
