@@ -3,23 +3,18 @@ package com.example.mtchecker
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
-import android.widget.Button
-import android.widget.ProgressBar
-import android.widget.TextView
-import android.widget.Toast
+import android.os.SystemClock
+import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.text.HtmlCompat
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import kotlinx.coroutines.*
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
@@ -30,18 +25,21 @@ import java.net.URL
 class MainActivity : AppCompatActivity() {
 
     private lateinit var statusText: TextView
-    private lateinit var resultText: TextView
     private lateinit var networkText: TextView
     private lateinit var progressBar: ProgressBar
-    private lateinit var checkButton: Button
+    private lateinit var startButton: Button
     private lateinit var stopButton: Button
-    private lateinit var loadFileButton: Button
+    private lateinit var chronometer: Chronometer
+    private lateinit var radioGithub: RadioButton
+    private lateinit var radioCustom: RadioButton
+    private lateinit var recyclerView: RecyclerView
+    private lateinit var adapter: ProxyAdapter
 
     private val url = "https://raw.githubusercontent.com/SoliSpirit/mtproto/master/all_proxies.txt"
     private val prefsName = "MtCheckerPrefs"
     
     private var checkJob: Job? = null
-    private val workingLinks = mutableListOf<String>()
+    private var customText: String? = null
 
     private val getContent = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { processFile(it) }
@@ -51,61 +49,71 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // Инициализация UI
         statusText = findViewById(R.id.statusText)
-        resultText = findViewById(R.id.resultText)
         networkText = findViewById(R.id.networkText)
         progressBar = findViewById(R.id.progressBar)
-        checkButton = findViewById(R.id.checkButton)
+        startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
-        loadFileButton = findViewById(R.id.loadFileButton)
-        val copyButton = findViewById<Button>(R.id.copyButton)
+        chronometer = findViewById(R.id.chronometer)
+        radioGithub = findViewById(R.id.radioGithub)
+        radioCustom = findViewById(R.id.radioCustom)
+        recyclerView = findViewById(R.id.recyclerView)
+        val versionText = findViewById<TextView>(R.id.versionText)
+        
+        versionText.text = getString(R.string.version_label, BuildConfig.VERSION_NAME)
+        networkText.text = getString(R.string.source_github) + " | ${getNetworkType()}"
 
-        networkText.text = "Сеть: ${getNetworkType()}"
+        // Настройка таблицы
+        adapter = ProxyAdapter(mutableListOf())
+        recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.adapter = adapter
+
         loadSavedResult()
 
-        checkButton.setOnClickListener {
-            startChecking(url)
-        }
+        radioGithub.setOnClickListener { networkText.text = getString(R.string.source_github) + " | ${getNetworkType()}" }
+        radioCustom.setOnClickListener { getContent.launch("text/plain") }
 
-        stopButton.setOnClickListener {
-            stopChecking()
+        startButton.setOnClickListener { startChecking() }
+        stopButton.setOnClickListener { stopChecking() }
+        
+        findViewById<Button>(R.id.exitButton).setOnClickListener { 
+            finishAffinity()
         }
-
-        loadFileButton.setOnClickListener {
-            getContent.launch("text/plain")
-        }
-
-        copyButton.setOnClickListener {
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = ClipData.newPlainText("Proxies", resultText.text)
-            clipboard.setPrimaryClip(clip)
-            Toast.makeText(this, "Скопировано!", Toast.LENGTH_SHORT).show()
+        
+        findViewById<Button>(R.id.copyAllButton).setOnClickListener {
+            val allLinks = adapter.items.joinToString("\n\n") { it.link }
+            if (allLinks.isNotEmpty()) {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Proxies", allLinks))
+                Toast.makeText(this, "Copied!", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
     private fun stopChecking() {
         checkJob?.cancel()
-        statusText.text = "Процесс остановлен пользователем"
+        chronometer.stop()
+        statusText.text = "Stopped"
         resetButtons()
-        if (resultText.text.isNotEmpty()) {
-            saveResult(resultText.text.toString())
-        }
     }
 
     private fun resetButtons() {
-        checkButton.isEnabled = true
-        loadFileButton.isEnabled = true
+        startButton.isEnabled = true
         stopButton.isEnabled = false
+        chronometer.visibility = android.view.View.GONE
+        radioGithub.isEnabled = true
+        radioCustom.isEnabled = true
     }
 
     private fun getNetworkType(): String {
         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = cm.activeNetwork ?: return "Нет сети"
-        val capabilities = cm.getNetworkCapabilities(network) ?: return "Неизвестно"
+        val network = cm.activeNetwork ?: return "No Net"
+        val capabilities = cm.getNetworkCapabilities(network) ?: return "Unknown"
         return when {
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi"
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "Мобильная"
-            else -> "Другая"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> getString(R.string.network_wifi)
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> getString(R.string.network_cell)
+            else -> "Other"
         }
     }
 
@@ -113,45 +121,57 @@ class MainActivity : AppCompatActivity() {
         try {
             val inputStream = contentResolver.openInputStream(uri)
             val reader = BufferedReader(InputStreamReader(inputStream))
-            val text = reader.readText()
+            customText = reader.readText()
             reader.close()
             inputStream?.close()
-            startCheckFromText(text, "Локальный файл")
+            networkText.text = getString(R.string.source_custom) + " | ${getNetworkType()}"
+            radioCustom.isChecked = true
         } catch (e: Exception) {
-            Toast.makeText(this, "Ошибка чтения файла: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "File error: ${e.message}", Toast.LENGTH_LONG).show()
+            radioGithub.isChecked = true
         }
     }
 
-    private fun startChecking(targetUrl: String) {
-        checkButton.isEnabled = false
-        loadFileButton.isEnabled = false
+    private fun startChecking() {
+        val isCustom = radioCustom.isChecked
+        if (isCustom && customText == null) {
+            getContent.launch("text/plain")
+            return
+        }
+
+        startButton.isEnabled = false
         stopButton.isEnabled = true
-        resultText.text = ""
+        radioGithub.isEnabled = false
+        radioCustom.isEnabled = false
         progressBar.progress = 0
-        statusText.text = "Скачиваю список..."
+        adapter.clear()
+        statusText.text = "Downloading..."
+        
+        chronometer.base = SystemClock.elapsedRealtime()
+        chronometer.start()
+        chronometer.visibility = android.view.View.VISIBLE
 
         checkJob = CoroutineScope(Dispatchers.IO).launch {
             try {
-                val connection = URL(targetUrl).openConnection() as HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.connect()
-                
-                val lastModified = connection.getHeaderField("Last-Modified") ?: "Дата неизвестна"
-                val text = connection.inputStream.bufferedReader().use { it.readText() }
+                val text = if (isCustom) customText!! else {
+                    val conn = URL(url).openConnection() as HttpURLConnection
+                    conn.connect()
+                    conn.inputStream.bufferedReader().use { it.readText() }
+                }
                 
                 withContext(Dispatchers.Main) {
-                    startCheckFromText(text, "GitHub ($lastModified)")
+                    startCheckFromText(text)
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    statusText.text = "Ошибка сети: ${e.message}"
+                    statusText.text = "Error: ${e.message}"
                     resetButtons()
                 }
             }
         }
     }
 
-    private fun startCheckFromText(text: String, sourceName: String) {
+    private fun startCheckFromText(text: String) {
         val regex = Regex("""server=([^&]+).*?port=(\d+)""")
         val proxies = regex.findAll(text).map { match ->
             val server = match.groupValues[1].trimEnd('.')
@@ -160,37 +180,26 @@ class MainActivity : AppCompatActivity() {
         }.toList().distinct()
 
         if (proxies.isEmpty()) {
-            statusText.text = "Прокси не найдены в источнике"
+            statusText.text = "No proxies found"
             resetButtons()
             return
         }
 
-        statusText.text = "Проверяю ${proxies.size} серверов..."
         progressBar.max = proxies.size
-        workingLinks.clear()
-        resultText.text = ""
 
-        val networkType = getNetworkType()
-        val dateStr = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
-        val header = "<b>Источник:</b> $sourceName<br><b>Сеть:</b> $networkType<br><b>Дата опроса:</b> $dateStr<br><b>Найдено:</b> <span id='count'>0</span> из ${proxies.size}<br><br>"
-
-        // Перезапускаем Job для процесса проверки
-        checkJob = CoroutineScope(Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.IO).launch {
             var checkedCount = 0
             for ((server, port) in proxies) {
-                if (!isActive) break // Прерываем цикл, если нажали Стоп
+                if (!isActive) break
 
+                val startTime = System.currentTimeMillis()
                 if (isServerAlive(server, port)) {
+                    val ping = System.currentTimeMillis() - startTime
                     val originalLine = text.lines().find { it.contains("server=$server") && it.contains("port=$port") }
+                    
                     if (originalLine != null) {
-                        workingLinks.add(originalLine)
-                        
-                        // Мгновенно выводим найденную ссылку на экран
-                        val headerWithCount = header.replace("<span id='count'>0</span>", "<span style='color:#D81B60;'><b>${workingLinks.size}</b></span>")
-                        val linksHtml = workingLinks.joinToString("<br><br>") { link -> "<a href=\"$link\">$link</a>" }
-                        
                         withContext(Dispatchers.Main) {
-                            resultText.text = HtmlCompat.fromHtml(headerWithCount + linksHtml, HtmlCompat.FROM_HTML_MODE_LEGACY)
+                            adapter.addItem(ProxyItem(originalLine, "$server:$port", ping))
                         }
                     }
                 }
@@ -201,16 +210,17 @@ class MainActivity : AppCompatActivity() {
                     val total = proxies.size
                     withContext(Dispatchers.Main) {
                         progressBar.progress = progress
-                        statusText.text = "Проверено $progress из $total..."
+                        statusText.text = getString(R.string.status_checking, progress, total)
                     }
                 }
             }
 
             withContext(Dispatchers.Main) {
                 if (isActive) {
-                    statusText.text = "Готово! Найдено: ${workingLinks.size}"
+                    statusText.text = getString(R.string.status_done, adapter.itemCount)
+                    chronometer.stop()
                     resetButtons()
-                    saveResult(resultText.text.toString())
+                    saveResult(adapter.items)
                 }
             }
         }
@@ -227,17 +237,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun saveResult(text: String) {
+    private fun saveResult(items: List<ProxyItem>) {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-        prefs.edit().putString("last_result", text).apply()
+        // Простое сохранение в строку (разделитель - символ переноса)
+        val savedString = items.joinToString("|") { "${it.link};;${it.displayName};;${it.ping}" }
+        prefs.edit().putString("last_result", savedString).apply()
     }
 
     private fun loadSavedResult() {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-        val saved = prefs.getString("last_result", "")
-        if (!saved.isNullOrEmpty()) {
-            resultText.text = HtmlCompat.fromHtml(saved, HtmlCompat.FROM_HTML_MODE_LEGACY)
-            statusText.text = "Загружен прошлый результат"
+        val saved = prefs.getString("last_result", "") ?: ""
+        if (saved.isNotEmpty()) {
+            val items = saved.split("|").mapNotNull { 
+                val parts = it.split(";;")
+                if (parts.size == 3) ProxyItem(parts[0], parts[1], parts[2].toLongOrNull() ?: 0L) else null
+            }
+            adapter.items.addAll(items)
+            adapter.notifyDataSetChanged()
         }
     }
 }
