@@ -56,7 +56,7 @@ class MainActivity : AppCompatActivity() {
         uri?.let { processFile(it) }
     }
 
-    // Запрос разрешений на геолокацию и данные телефона
+    // Обработчик разрешений (неважно, разрешил пользователь или нет, мы просто продолжаем работу)
     private val requestPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { 
         updateNetworkText()
         if (checkJob?.isActive != true) loadSavedResult()
@@ -93,7 +93,6 @@ class MainActivity : AppCompatActivity() {
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
 
-        // Проверяем разрешения при старте
         checkAndRequestPermissions()
 
         radioGithub.setOnClickListener { updateNetworkText() }
@@ -138,7 +137,8 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         connectivityManager.registerDefaultNetworkCallback(networkCallback)
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+        // Обновляем только если приложение уже инициализировано
+        if (::adapter.isInitialized) {
             updateNetworkText()
             if (checkJob?.isActive != true) loadSavedResult()
         }
@@ -151,28 +151,46 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        saveResult(adapter.items, currentCheckNetwork.ifEmpty { getNetworkIdentifier() })
+        if (::adapter.isInitialized) {
+            saveResult(adapter.items, currentCheckNetwork.ifEmpty { getNetworkIdentifier() })
+        }
     }
 
-    // Получаем человекочитаемое имя сети (для экрана)
+    // Получаем имя сети БЕЗОПАСНО (чтобы не вылетало)
     private fun getNetworkName(): String {
         val network = connectivityManager.activeNetwork ?: return "No Net"
         val caps = connectivityManager.getNetworkCapabilities(network) ?: return "Unknown"
         
         if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            @Suppress("DEPRECATION")
-            val ssid = wifiManager.connectionInfo.ssid.replace("\"", "")
-            return if (ssid == "<unknown ssid>" || ssid.isEmpty()) "Wi-Fi" else "Wi-Fi: $ssid"
+            // Проверяем, дал ли пользователь разрешение на геолокацию
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                try {
+                    val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                    @Suppress("DEPRECATION")
+                    val ssid = wifiManager.connectionInfo.ssid.replace("\"", "")
+                    if (ssid != "<unknown ssid>" && ssid.isNotEmpty()) {
+                        return "Wi-Fi: $ssid"
+                    }
+                } catch (e: Exception) { /* Игнорируем ошибки */ }
+            }
+            return "Wi-Fi" // Если нет разрешения или ошибка
         } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
-            val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-            val carrier = tm.networkOperatorName
-            return if (carrier.isNullOrEmpty()) "Mobile" else "Mobile: $carrier"
+            // Проверяем разрешение на чтение данных телефона
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+                try {
+                    val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+                    val carrier = tm.networkOperatorName
+                    if (!carrier.isNullOrEmpty()) {
+                        return "Mobile: $carrier"
+                    }
+                } catch (e: Exception) { /* Игнорируем ошибки */ }
+            }
+            return "Mobile" // Если нет разрешения или ошибка
         }
         return "Other"
     }
 
-    // Получаем ID сети для сохранения в память (без пробелов и спецсимволов)
+    // Идентификатор сети для сохранения (заменяет недопустимые символы)
     private fun getNetworkIdentifier(): String {
         return getNetworkName().replace("[^a-zA-Z0-9а-яА-Я]".toRegex(), "_")
     }
@@ -220,7 +238,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        currentCheckNetwork = getNetworkIdentifier() // Запоминаем ID сети
+        currentCheckNetwork = getNetworkIdentifier()
 
         startButton.isEnabled = false
         stopButton.isEnabled = true
@@ -320,7 +338,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // СОХРАНЕНИЕ ПОД КЛЮЧОМ КОНКРЕТНОЙ СЕТИ
     private fun saveResult(items: List<ProxyItem>, netId: String) {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val savedString = items.joinToString("|") { "${it.link};;${it.displayName};;${it.ping}" }
@@ -332,7 +349,6 @@ class MainActivity : AppCompatActivity() {
             .apply()
     }
 
-    // ЗАГРУЗКА ПОД КЛЮЧОМ КОНКРЕТНОЙ СЕТИ
     private fun loadSavedResult() {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val netId = getNetworkIdentifier()
