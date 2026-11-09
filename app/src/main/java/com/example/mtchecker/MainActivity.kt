@@ -179,7 +179,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // --- ЛОГИКА АВТООБНОВЛЕНИЯ ---
-    private fun checkForUpdates(silent: Boolean) {
+       private fun checkForUpdates(silent: Boolean) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val url = URL("https://api.github.com/repos/mrDarkDuck/flaminGo/releases/latest")
@@ -194,6 +194,7 @@ class MainActivity : AppCompatActivity() {
                 latestApkUrl = apkRegex.find(response)?.groupValues?.get(1)
 
                 withContext(Dispatchers.Main) {
+                    // Если версия на GitHub строго больше нашей - показываем кнопку
                     if (latestVersion > BuildConfig.VERSION_CODE) {
                         updateButton.visibility = android.view.View.VISIBLE
                         if (!silent) {
@@ -205,6 +206,8 @@ class MainActivity : AppCompatActivity() {
                                 .show()
                         }
                     } else {
+                        // Если у нас последняя версия - ПРЯЧЕМ кнопку
+                        updateButton.visibility = android.view.GONE
                         if (!silent) Toast.makeText(this@MainActivity, "У вас последняя версия!", Toast.LENGTH_SHORT).show()
                     }
                 }
