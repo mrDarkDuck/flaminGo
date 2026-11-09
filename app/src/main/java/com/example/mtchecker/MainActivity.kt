@@ -1,6 +1,7 @@
 package com.example.mtchecker
 
 import android.Manifest
+import android.app.DownloadManager
 import android.content.*
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
@@ -10,6 +11,7 @@ import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.SystemClock
 import android.telephony.TelephonyManager
 import android.widget.*
@@ -17,11 +19,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.*
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
+import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -35,6 +40,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
     private lateinit var recheckButton: Button
+    private lateinit var updateButton: Button
     private lateinit var chronometer: Chronometer
     private lateinit var radioGithub: RadioButton
     private lateinit var radioCustom: RadioButton
@@ -46,6 +52,7 @@ class MainActivity : AppCompatActivity() {
     private val prefsName = "MtCheckerPrefs"
     
     private var customText: String? = null
+    private var latestApkUrl: String? = null
 
     private val getContent = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { processFile(it) }
@@ -109,13 +116,13 @@ class MainActivity : AppCompatActivity() {
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
         recheckButton = findViewById(R.id.recheckButton)
+        updateButton = findViewById(R.id.updateButton)
         chronometer = findViewById(R.id.chronometer)
         radioGithub = findViewById(R.id.radioGithub)
         radioCustom = findViewById(R.id.radioCustom)
         recyclerView = findViewById(R.id.recyclerView)
         versionText = findViewById(R.id.versionText)
         
-        // Показываем только версию, без времени
         versionText.text = "Версия: ${BuildConfig.VERSION_NAME}"
 
         adapter = ProxyAdapter(mutableListOf())
@@ -140,8 +147,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        findViewById<Button>(R.id.settingsButton).setOnClickListener {
-            showSettingsDialog()
+        findViewById<Button>(R.id.settingsButton).setOnClickListener { showSettingsDialog() }
+
+        updateButton.setOnClickListener {
+            latestApkUrl?.let { downloadAndInstallApk(it) }
         }
 
         findViewById<Button>(R.id.exitButton).setOnClickListener {
@@ -154,17 +163,99 @@ class MainActivity : AppCompatActivity() {
             val changelogUrl = "https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/CHANGELOG.md"
             showChangelogDialog(changelogUrl)
         }
+
+        // ТИХАЯ ПРОВЕРКА ОБНОВЛЕНИЙ ПРИ ЗАПУСКЕ
+        checkForUpdates(silent = true)
     }
 
+    // --- ЛОГИКА АВТООБНОВЛЕНИЯ ---
+    private fun checkForUpdates(silent: Boolean) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val url = URL("https://api.github.com/repos/mrDarkDuck/flaminGo/releases/latest")
+                val connection = url.openConnection() as HttpURLConnection
+                connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
+                val response = connection.inputStream.bufferedReader().use { it.readText() }
+                
+                val tagRegex = Regex(""""tag_name"\s*:\s*"v1\.(\d+)"""")
+                val latestVersion = tagRegex.find(response)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                
+                val apkRegex = Regex(""""browser_download_url"\s*:\s*"([^"]+\.apk)"""")
+                latestApkUrl = apkRegex.find(response)?.groupValues?.get(1)
+
+                withContext(Dispatchers.Main) {
+                    if (latestVersion > BuildConfig.VERSION_CODE) {
+                        // Нашли новую версию! Показываем кнопку
+                        updateButton.visibility = android.view.View.VISIBLE
+                        if (!silent) {
+                            AlertDialog.Builder(this@MainActivity)
+                                .setTitle("Доступно обновление!")
+                                .setMessage("Установлена версия 1.${BuildConfig.VERSION_CODE}. Доступна 1.$latestVersion.\nСкачать?")
+                                .setPositiveButton("Да") { _, _ -> latestApkUrl?.let { downloadAndInstallApk(it) } }
+                                .setNegativeButton("Позже", null)
+                                .show()
+                        }
+                    } else {
+                        if (!silent) Toast.makeText(this@MainActivity, "У вас последняя версия!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                if (!silent) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@MainActivity, "Ошибка проверки: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun downloadAndInstallApk(apkUrl: String) {
+        Toast.makeText(this, "Начинаю скачивание...", Toast.LENGTH_SHORT).show()
+        val request = DownloadManager.Request(Uri.parse(apkUrl))
+        request.setTitle("FlaminGo Update")
+        request.setDescription("Скачивание обновления...")
+        request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "update.apk")
+
+        val downloadManager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        val downloadId = downloadManager.enqueue(request)
+
+        CoroutineScope(Dispatchers.IO).launch {
+            var isDownloading = true
+            while (isDownloading) {
+                val cursor = downloadManager.query(DownloadManager.Query().setFilterById(downloadId))
+                if (cursor.moveToFirst()) {
+                    val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                    if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                        isDownloading = false
+                        val file = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "update.apk")
+                        withContext(Dispatchers.Main) { installApk(file) }
+                    } else if (status == DownloadManager.STATUS_FAILED) {
+                        isDownloading = false
+                        withContext(Dispatchers.Main) { Toast.makeText(this@MainActivity, "Ошибка скачивания", Toast.LENGTH_SHORT).show() }
+                    }
+                }
+                cursor.close()
+                delay(1000)
+            }
+        }
+    }
+
+    private fun installApk(file: File) {
+        val intent = Intent(Intent.ACTION_VIEW)
+        val uri = FileProvider.getUriForFile(this, "com.example.mtchecker.fileprovider", file)
+        intent.setDataAndType(uri, "application/vnd.android.package-archive")
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(intent)
+    }
+
+    // --- СТАРЫЕ ФУНКЦИИ ---
     private fun checkAndRequestPermissions() {
-        val permissions = mutableListOf(
-            Manifest.permission.ACCESS_FINE_LOCATION, 
-            Manifest.permission.READ_PHONE_STATE
-        )
+        val permissions = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.READ_PHONE_STATE)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
-
         val allGranted = permissions.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
         
         if (allGranted) {
@@ -194,7 +285,6 @@ class MainActivity : AppCompatActivity() {
         
         if (::adapter.isInitialized) {
             updateNetworkText()
-            
             if (CheckService.isRunning || CheckService.currentTotal > 0) {
                 adapter.clear()
                 adapter.items.addAll(CheckService.foundProxies)
