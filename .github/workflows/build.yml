@@ -3,6 +3,10 @@ name: Build Android APK
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
   workflow_dispatch:
 # ЭТИ 3 СТРОЧКИ ОТМЕНЯЮТ СТАРЫЕ СБОРКИ ПРИ НОВОМ КОММИТЕ
 concurrency:
