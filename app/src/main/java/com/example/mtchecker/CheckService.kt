@@ -7,12 +7,11 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.*
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
+import kotlin.coroutines.coroutineContext // <-- ДОБАВЛЕН ИМПОРТ
 
 class CheckService : Service() {
 
@@ -69,7 +68,8 @@ class CheckService : Service() {
         var checkedCount = 0
         
         for ((server, port) in proxies) {
-            if (!isActive) break
+            // ИСПРАВЛЕНИЕ ЗДЕСЬ: используем coroutineContext.isActive
+            if (!coroutineContext.isActive) break
 
             val startTime = System.currentTimeMillis()
             if (isServerAlive(server, port)) {
@@ -98,7 +98,8 @@ class CheckService : Service() {
             }
         }
 
-        if (isActive) {
+        // ИСПРАВЛЕНИЕ ЗДЕСЬ: используем coroutineContext.isActive
+        if (coroutineContext.isActive) {
             sendBroadcast(Intent("CHECK_FINISHED"))
         }
         stopSelf()
