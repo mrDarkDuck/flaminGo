@@ -34,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
+    private lateinit var recheckButton: Button
     private lateinit var chronometer: Chronometer
     private lateinit var radioGithub: RadioButton
     private lateinit var radioCustom: RadioButton
@@ -41,7 +42,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var versionText: TextView
     private lateinit var adapter: ProxyAdapter
 
-    private val url = "https://raw.githubusercontent.com/SoliSpirit/mtproto/master/all_proxies.txt"
+    private val defaultUrl = "https://raw.githubusercontent.com/SoliSpirit/mtproto/master/all_proxies.txt"
     private val prefsName = "MtCheckerPrefs"
     
     private var customText: String? = null
@@ -107,13 +108,15 @@ class MainActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progressBar)
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
+        recheckButton = findViewById(R.id.recheckButton)
         chronometer = findViewById(R.id.chronometer)
         radioGithub = findViewById(R.id.radioGithub)
         radioCustom = findViewById(R.id.radioCustom)
         recyclerView = findViewById(R.id.recyclerView)
         versionText = findViewById(R.id.versionText)
         
-        versionText.text = getString(R.string.version_label, BuildConfig.VERSION_NAME, BuildConfig.BUILD_TIME)
+        // Показываем только версию, без времени
+        versionText.text = "Версия: ${BuildConfig.VERSION_NAME}"
 
         adapter = ProxyAdapter(mutableListOf())
         recyclerView.layoutManager = LinearLayoutManager(this)
@@ -126,14 +129,19 @@ class MainActivity : AppCompatActivity() {
 
         startButton.setOnClickListener { startChecking() }
         stopButton.setOnClickListener { stopChecking() }
+        recheckButton.setOnClickListener { startRecheck() }
         
         findViewById<Button>(R.id.copyAllButton).setOnClickListener {
             val allLinks = adapter.items.joinToString("\n\n") { it.link }
             if (allLinks.isNotEmpty()) {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("Proxies", allLinks))
-                Toast.makeText(this, "Copied!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Скопировано!", Toast.LENGTH_SHORT).show()
             }
+        }
+
+        findViewById<Button>(R.id.settingsButton).setOnClickListener {
+            showSettingsDialog()
         }
 
         findViewById<Button>(R.id.exitButton).setOnClickListener {
@@ -169,7 +177,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        // Регистрируем приемник
         val filter = IntentFilter().apply {
             addAction("CHECK_PROGRESS")
             addAction("CHECK_RESULT")
@@ -188,7 +195,6 @@ class MainActivity : AppCompatActivity() {
         if (::adapter.isInitialized) {
             updateNetworkText()
             
-            // ВОССТАНАВЛИВАЕМ СОСТОЯНИЕ ИЗ ПАМЯТИ СЕРВИСА
             if (CheckService.isRunning || CheckService.currentTotal > 0) {
                 adapter.clear()
                 adapter.items.addAll(CheckService.foundProxies)
@@ -201,6 +207,7 @@ class MainActivity : AppCompatActivity() {
                     statusText.text = getString(R.string.status_checking, CheckService.currentChecked, CheckService.currentTotal)
                     startButton.isEnabled = false
                     stopButton.isEnabled = true
+                    recheckButton.isEnabled = false
                     radioGithub.isEnabled = false
                     radioCustom.isEnabled = false
                     chronometer.visibility = android.view.View.VISIBLE
@@ -264,7 +271,7 @@ class MainActivity : AppCompatActivity() {
         stopService(Intent(this, CheckService::class.java))
         CheckService.isRunning = false
         chronometer.stop()
-        statusText.text = "Stopped"
+        statusText.text = "Остановлено"
         resetButtons()
         saveResult(adapter.items, CheckService.currentNetworkId.ifEmpty { getNetworkIdentifier() })
     }
@@ -272,6 +279,7 @@ class MainActivity : AppCompatActivity() {
     private fun resetButtons() {
         startButton.isEnabled = true
         stopButton.isEnabled = false
+        recheckButton.isEnabled = adapter.items.isNotEmpty() 
         chronometer.visibility = android.view.View.GONE
         radioGithub.isEnabled = true
         radioCustom.isEnabled = true
@@ -287,7 +295,7 @@ class MainActivity : AppCompatActivity() {
             updateNetworkText()
             radioCustom.isChecked = true
         } catch (e: Exception) {
-            Toast.makeText(this, "File error: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Ошибка файла: ${e.message}", Toast.LENGTH_LONG).show()
             radioGithub.isChecked = true
         }
     }
@@ -298,32 +306,104 @@ class MainActivity : AppCompatActivity() {
             getContent.launch("text/plain")
             return
         }
+        
+        val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        val targetUrl = prefs.getString("list_url", defaultUrl) ?: defaultUrl
+        val limit = prefs.getInt("check_limit", 0)
+        val onlyFast = prefs.getBoolean("only_fast", false)
 
-        val netId = getNetworkIdentifier()
-        CheckService.currentNetworkId = netId
+        prepareUiForCheck()
 
+        val serviceIntent = Intent(this, CheckService::class.java).apply {
+            putExtra("url", targetUrl)
+            putExtra("limit", limit)
+            putExtra("onlyFast", onlyFast)
+            if (isCustom) putExtra("customText", customText)
+        }
+        startServiceCompat(serviceIntent)
+    }
+
+    private fun startRecheck() {
+        if (adapter.items.isEmpty()) return
+        
+        val linksToRecheck = adapter.items.joinToString("\n") { it.link }
+        
+        val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        val onlyFast = prefs.getBoolean("only_fast", false)
+
+        prepareUiForCheck()
+
+        val serviceIntent = Intent(this, CheckService::class.java).apply {
+            putExtra("customText", linksToRecheck)
+            putExtra("isReCheck", true)
+            putExtra("onlyFast", onlyFast)
+        }
+        startServiceCompat(serviceIntent)
+    }
+
+    private fun prepareUiForCheck() {
         startButton.isEnabled = false
         stopButton.isEnabled = true
+        recheckButton.isEnabled = false
         radioGithub.isEnabled = false
         radioCustom.isEnabled = false
         progressBar.progress = 0
         adapter.clear()
-        statusText.text = "Starting service..."
+        statusText.text = "Запуск сервиса..."
         
         chronometer.base = SystemClock.elapsedRealtime()
         chronometer.start()
         chronometer.visibility = android.view.View.VISIBLE
+    }
 
-        val serviceIntent = Intent(this, CheckService::class.java).apply {
-            putExtra("url", url)
-            if (isCustom) putExtra("customText", customText)
-        }
-        
+    private fun startServiceCompat(intent: Intent) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
+            startForegroundService(intent)
         } else {
-            startService(serviceIntent)
+            startService(intent)
         }
+    }
+
+    private fun showSettingsDialog() {
+        val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        val dialogView = layoutInflater.inflate(R.layout.dialog_settings, null)
+        
+        val urlInput = dialogView.findViewById<EditText>(R.id.settingsUrl)
+        val depthGroup = dialogView.findViewById<RadioGroup>(R.id.depthGroup)
+        val onlyFastCheck = dialogView.findViewById<CheckBox>(R.id.onlyFastCheck)
+
+        urlInput.setText(prefs.getString("list_url", defaultUrl) ?: defaultUrl)
+        
+        when (prefs.getInt("check_limit", 0)) {
+            1 -> depthGroup.check(R.id.depth1)
+            3 -> depthGroup.check(R.id.depth3)
+            5 -> depthGroup.check(R.id.depth5)
+            else -> depthGroup.check(R.id.depthAll)
+        }
+        onlyFastCheck.isChecked = prefs.getBoolean("only_fast", false)
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings_title)
+            .setView(dialogView)
+            .setPositiveButton(R.string.settings_save) { _, _ ->
+                var newUrl = urlInput.text.toString().trim()
+                if (newUrl.isEmpty()) newUrl = defaultUrl
+
+                val limit = when (depthGroup.checkedRadioButtonId) {
+                    R.id.depth1 -> 1
+                    R.id.depth3 -> 3
+                    R.id.depth5 -> 5
+                    else -> 0
+                }
+
+                prefs.edit()
+                    .putString("list_url", newUrl)
+                    .putInt("check_limit", limit)
+                    .putBoolean("only_fast", onlyFastCheck.isChecked)
+                    .apply()
+            }
+            .setNegativeButton(R.string.settings_cancel, null)
+            .show()
     }
 
     private fun saveResult(items: List<ProxyItem>, netId: String) {
@@ -361,6 +441,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             statusText.text = getString(R.string.status_ready)
         }
+        recheckButton.isEnabled = adapter.items.isNotEmpty()
     }
 
     private fun showChangelogDialog(url: String) {
