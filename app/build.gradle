@@ -7,13 +7,13 @@ android {
     namespace 'com.example.mtchecker'
     compileSdk 34
 
-    defaultConfig {
-        applicationId "com.example.mtchecker"
-        minSdk 24
-        targetSdk 34
-        versionCode 1
-        versionName "1.0"
-    }
+defaultConfig {
+    applicationId "com.example.mtchecker"
+    minSdk 24
+    targetSdk 34
+    versionCode 1        // <--- ДОБАВИТЬ
+    versionName "1.0"    // <--- ДОБАВИТЬ
+}
 
     buildTypes {
         release {
