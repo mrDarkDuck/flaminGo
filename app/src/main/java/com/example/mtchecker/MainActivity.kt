@@ -85,9 +85,13 @@ class MainActivity : AppCompatActivity() {
                 "CHECK_PROGRESS" -> {
                     val checked = intent.getIntExtra("checked", 0)
                     val total = intent.getIntExtra("total", 0)
-                    progressBar.max = total
-                    progressBar.progress = checked
-                    statusText.text = getString(R.string.status_checking, checked, total)
+                    
+                    // Если total = 0, значит список еще грузится или пуст
+                    if (total > 0) {
+                        progressBar.max = total
+                        progressBar.progress = checked
+                        statusText.text = getString(R.string.status_checking, checked, total)
+                    }
                 }
                 "CHECK_RESULT" -> {
                     val link = intent.getStringExtra("link") ?: return
@@ -105,7 +109,9 @@ class MainActivity : AppCompatActivity() {
                 "CHECK_ERROR" -> {
                     CheckService.isRunning = false
                     val error = intent.getStringExtra("error") ?: "Unknown error"
-                    statusText.text = "Error: $error"
+                    statusText.text = "Ошибка: $error"
+                    progressBar.max = 100
+                    progressBar.progress = 0 // Сбрасываем прогресс при ошибке
                     resetButtons()
                 }
             }
@@ -179,7 +185,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // --- ЛОГИКА АВТООБНОВЛЕНИЯ ---
-       private fun checkForUpdates(silent: Boolean) {
+    private fun checkForUpdates(silent: Boolean) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val url = URL("https://api.github.com/repos/mrDarkDuck/flaminGo/releases/latest")
@@ -194,7 +200,6 @@ class MainActivity : AppCompatActivity() {
                 latestApkUrl = apkRegex.find(response)?.groupValues?.get(1)
 
                 withContext(Dispatchers.Main) {
-                    // Если версия на GitHub строго больше нашей - показываем кнопку
                     if (latestVersion > BuildConfig.VERSION_CODE) {
                         updateButton.visibility = android.view.View.VISIBLE
                         if (!silent) {
@@ -206,7 +211,6 @@ class MainActivity : AppCompatActivity() {
                                 .show()
                         }
                     } else {
-                        // Если у нас последняя версия - ПРЯЧЕМ кнопку
                         updateButton.visibility = android.view.View.GONE
                         if (!silent) Toast.makeText(this@MainActivity, "У вас последняя версия!", Toast.LENGTH_SHORT).show()
                     }
@@ -262,7 +266,7 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-    // --- ОСТАЛЬНЫЕ ФУНКЦИИ ---
+    // --- СИСТЕМНЫЕ ФУНКЦИИ ---
     private fun checkAndRequestPermissions() {
         val permissions = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.READ_PHONE_STATE)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -376,6 +380,8 @@ class MainActivity : AppCompatActivity() {
         CheckService.isRunning = false
         chronometer.stop()
         statusText.text = "Остановлено"
+        progressBar.max = 100
+        progressBar.progress = 0
         resetButtons()
         saveResult(adapter.items, CheckService.currentNetworkId.ifEmpty { getNetworkIdentifier() })
     }
