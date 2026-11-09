@@ -102,12 +102,10 @@ class MainActivity : AppCompatActivity() {
 
         // Кнопка "Что нового"
         findViewById<Button>(R.id.whatsNewButton).setOnClickListener {
-            val url = "https://github.com/mrDarkDuck/flaminGo/releases" // Ссылка на ваш репозиторий
-            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
-            intent.data = Uri.parse(url)
-            startActivity(intent)
+            // Ссылка на сырой файл CHANGELOG.md в вашем репозитории
+            val changelogUrl = "https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/CHANGELOG.md"
+            showChangelogDialog(changelogUrl)
         }
-    }
 
     // Сохраняем список, если приложение свернули или убили системой
     override fun onStop() {
@@ -280,4 +278,32 @@ class MainActivity : AppCompatActivity() {
             adapter.notifyDataSetChanged()
         }
     }
+    // Функция для скачивания и показа окна с изменениями
+    private fun showChangelogDialog(url: String) {
+        // Показываем временное сообщение, что идет загрузка
+        val loadingToast = Toast.makeText(this, "Загрузка...", Toast.LENGTH_SHORT)
+        loadingToast.show()
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val text = URL(url).readText()
+                withContext(Dispatchers.Main) {
+                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Что нового?")
+                        .setMessage(text)
+                        .setPositiveButton("ОК", null)
+                        .show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Что нового?")
+                        .setMessage("Не удалось загрузить список изменений.\nПроверьте интернет.")
+                        .setPositiveButton("ОК", null)
+                        .show()
+                }
+            }
+        }
+    }
+    
 }
