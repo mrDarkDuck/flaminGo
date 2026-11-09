@@ -5,7 +5,7 @@
     android:orientation="vertical"
     android:padding="12dp">
 
-    <!-- Верхняя панель: Версия, Настройки, Что нового, Выход -->
+    <!-- Верхняя панель: Настройки, Что нового, Выход -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -13,13 +13,11 @@
         android:gravity="center_vertical"
         android:layout_marginBottom="8dp">
 
-        <TextView
-            android:id="@+id/versionText"
+        <!-- Невидимый распорка, чтобы кнопки ушли вправо -->
+        <View
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textSize="12sp"
-            android:textColor="#888888"/>
+            android:layout_weight="1"/>
 
         <Button
             android:id="@+id/settingsButton"
@@ -27,6 +25,18 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/btn_settings"
+            android:textColor="#D81B60"
+            android:textSize="12sp"
+            android:minWidth="0dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"/>
+
+        <Button
+            android:id="@+id/whatsNewButton"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Что нового?"
             android:textColor="#D81B60"
             android:textSize="12sp"
             android:minWidth="0dp"
@@ -44,21 +54,9 @@
             android:minWidth="0dp"
             android:paddingStart="8dp"
             android:paddingEnd="8dp"
-            android:visibility="gone" /> <!-- Скрыта по умолчанию -->
+            android:visibility="gone" />
 
-        <Button
-            android:id="@+id/whatsNewButton"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Что нового?"
-            android:textColor="#D81B60"
-            android:textSize="12sp"
-            android:minWidth="0dp"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"/>
-
-        <!-- Кнопка выхода теперь с обычным фоном -->
+        <!-- Кнопка выхода с обычным фоном -->
         <Button
             android:id="@+id/exitButton"
             android:layout_width="wrap_content"
@@ -168,7 +166,7 @@
             android:layout_marginStart="4dp"/>
     </LinearLayout>
 
-    <!-- Кнопки Копировать и ReCheck -->
+    <!-- Кнопки Копировать и ReCheck (со стрелочкой) -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -183,10 +181,12 @@
             android:layout_marginEnd="4dp"/>
         <Button
             android:id="@+id/recheckButton"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/btn_recheck"
+            android:text="↻" 
+            android:textSize="24sp"
+            android:paddingTop="0dp"
+            android:paddingBottom="0dp"
             android:enabled="false"
             android:layout_marginStart="4dp"/>
     </LinearLayout>
@@ -198,5 +198,16 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:background="#1E1E1E"/>
+
+    <!-- Номер версии в самом низу -->
+    <TextView
+        android:id="@+id/versionText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="V1.0"
+        android:textSize="12sp"
+        android:textColor="#888888"
+        android:gravity="center"
+        android:layout_marginTop="4dp"/>
 
 </LinearLayout>
