@@ -74,66 +74,76 @@ class CheckService : Service() {
 
     private suspend fun performChecks(text: String, limit: Int, onlyFast: Boolean) {
         val regex = Regex("""server=([^&]+).*?port=(\d+)""")
-        val proxies = regex.findAll(text).map { match ->
+        val allProxies = regex.findAll(text).map { match ->
             val server = match.groupValues[1].trimEnd('.')
             val port = match.groupValues[2].toInt()
             Pair(server, port)
         }.toList().distinct()
 
-        if (proxies.isEmpty()) {
-            broadcastError("Прокси не найдены. Возможно, список пуст или заблокирован.")
+        if (allProxies.isEmpty()) {
+            broadcastError("Прокси не найдены.")
             stopSelf()
             return
         }
 
-        currentTotal = proxies.size
+        currentTotal = allProxies.size
         broadcastProgress(0, currentTotal)
 
-        // Ограничиваем количество одновременных проверок (15 потоков)
-        val semaphore = Semaphore(15)
-        
-        // Потокобезопасные счетчики
-        val checkedCount = AtomicInteger(0)
+        val semaphore = Semaphore(15) // 15 "кассиров"
         val foundCount = AtomicInteger(0)
+        val retryList = mutableListOf<Pair<String, Int>>()
+        val checkedCount = AtomicInteger(0)
 
+        // --- ПРОХОД 1: БЫСТРОЕ СИТО (1 секунда) ---
+        updateNotification("Быстрая проверка (1 сек)...")
         coroutineScope {
-            for ((server, port) in proxies) {
-                // Если достигли лимита или нажали Стоп - выходим из цикла
+            for (proxy in allProxies) {
                 if (limit > 0 && foundCount.get() >= limit) break
                 if (!coroutineContext.isActive) break
 
                 launch {
                     semaphore.withPermit {
-                        // Проверяем еще раз, не нажали ли Стоп, пока стояли в очереди
                         if (!coroutineContext.isActive) return@withPermit
 
                         val startTime = System.currentTimeMillis()
-                        if (isServerAlive(server, port)) {
+                        if (isServerAlive(proxy.first, proxy.second, timeoutMs = 1000)) {
                             val ping = System.currentTimeMillis() - startTime
-                            
-                            // Фильтр "только быстрые"
                             if (!(onlyFast && ping >= 150)) {
-                                val originalLine = text.lines().find { it.contains("server=$server") && it.contains("port=$port") }
-                                if (originalLine != null) {
-                                    val item = ProxyItem(originalLine, "$server:$port", ping)
-                                    
-                                    // Синхронизируем добавление в общий список
-                                    synchronized(foundProxies) {
-                                        foundProxies.add(item)
-                                    }
-                                    foundCount.incrementAndGet()
-                                    broadcastResult(item)
-                                }
+                                addResult(proxy, ping, text, foundCount)
                             }
+                        } else {
+                            // Если не ответил за 1 сек - в карантин
+                            synchronized(retryList) { retryList.add(proxy) }
                         }
                         
                         val current = checkedCount.incrementAndGet()
-                        currentChecked = current // Обновляем статическую переменную для MainActivity
-                        
-                        // Обновляем прогресс-бар каждые 5 проверок
-                        if (current % 5 == 0 || current == proxies.size) {
-                            broadcastProgress(current, proxies.size)
-                            updateNotification("Проверено $current из ${proxies.size}...")
+                        currentChecked = current
+                        if (current % 5 == 0 || current == allProxies.size) {
+                            broadcastProgress(current, allProxies.size)
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- ПРОХОД 2: ГЛУБОКОЕ СИТО (3 секунды) ---
+        // Запускаем ТОЛЬКО если не достигнут лимит, не нажат Стоп и нам нужны медленные прокси
+        if ((limit == 0 || foundCount.get() < limit) && coroutineContext.isActive && !onlyFast) {
+            updateNotification("Глубокая проверка (${retryList.size} шт)...")
+            coroutineScope {
+                for (proxy in retryList) {
+                    if (limit > 0 && foundCount.get() >= limit) break
+                    if (!coroutineContext.isActive) break
+
+                    launch {
+                        semaphore.withPermit {
+                            if (!coroutineContext.isActive) return@withPermit
+
+                            val startTime = System.currentTimeMillis()
+                            if (isServerAlive(proxy.first, proxy.second, timeoutMs = 3000)) {
+                                val ping = System.currentTimeMillis() - startTime
+                                addResult(proxy, ping, text, foundCount)
+                            }
                         }
                     }
                 }
@@ -147,10 +157,21 @@ class CheckService : Service() {
         stopSelf()
     }
 
-    private fun isServerAlive(host: String, port: Int): Boolean {
+    // Вспомогательная функция для добавления результата
+    private fun addResult(proxy: Pair<String, Int>, ping: Long, text: String, foundCount: AtomicInteger) {
+        val originalLine = text.lines().find { it.contains("server=${proxy.first}") && it.contains("port=${proxy.second}") }
+        if (originalLine != null) {
+            val item = ProxyItem(originalLine, "${proxy.first}:${proxy.second}", ping)
+            synchronized(foundProxies) { foundProxies.add(item) }
+            foundCount.incrementAndGet()
+            broadcastResult(item)
+        }
+    }
+
+    private fun isServerAlive(host: String, port: Int, timeoutMs: Int): Boolean {
         return try {
             val socket = Socket()
-            socket.connect(InetSocketAddress(host, port), 3000)
+            socket.connect(InetSocketAddress(host, port), timeoutMs)
             socket.close()
             true
         } catch (e: Exception) {
