@@ -32,7 +32,7 @@
         android:progress="0"
         android:layout_marginBottom="8dp"/>
 
-    <LinearLayout
+        <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -43,15 +43,17 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Онлайн список"
+            android:text="Онлайн"
             android:layout_marginEnd="4dp"/>
 
         <Button
-            android:id="@+id/loadFileButton"
+            android:id="@+id/stopButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Свой файл .txt"
+            android:text="Стоп"
+            android:enabled="false"
+            android:backgroundTint="#9E9E9E"
             android:layout_marginStart="4dp"/>
     </LinearLayout>
 
