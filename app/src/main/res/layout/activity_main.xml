@@ -32,7 +32,8 @@
         android:progress="0"
         android:layout_marginBottom="8dp"/>
 
-        <LinearLayout
+    <!-- Первый ряд: Онлайн и Стоп -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -57,12 +58,29 @@
             android:layout_marginStart="4dp"/>
     </LinearLayout>
 
-    <Button
-        android:id="@+id/copyButton"
+    <!-- Второй ряд: Свой файл и Копировать -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Скопировать рабочие"
-        android:layout_marginBottom="8dp"/>
+        android:orientation="horizontal"
+        android:layout_marginBottom="8dp">
+
+        <Button
+            android:id="@+id/loadFileButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Свой файл"
+            android:layout_marginEnd="4dp"/>
+
+        <Button
+            android:id="@+id/copyButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Копировать"
+            android:layout_marginStart="4dp"/>
+    </LinearLayout>
 
     <ScrollView
         android:layout_width="match_parent"
