@@ -5,60 +5,87 @@
     android:orientation="vertical"
     android:padding="12dp">
 
-    <!-- Верхняя панель: кнопки прижаты вправо -->
+    <!-- Верхняя панель: Настройки (слева), Что нового (по центру), Обновить + Выход (справа) -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="end|center_vertical"
+        android:gravity="center_vertical"
         android:layout_marginBottom="8dp">
 
-        <Button
-            android:id="@+id/settingsButton"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
+        <!-- ЛЕВАЯ ЧАСТЬ: Настройки (Символ шестеренки) -->
+        <FrameLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="@string/btn_settings"
-            android:textColor="#D81B60"
-            android:textSize="12sp"
-            android:minWidth="0dp"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"/>
+            android:layout_weight="1"
+            android:gravity="start|center_vertical">
+            <Button
+                android:id="@+id/settingsButton"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚙️"
+                android:textSize="20sp"
+                android:minWidth="0dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"/>
+        </FrameLayout>
 
-        <Button
-            android:id="@+id/whatsNewButton"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
+        <!-- ЦЕНТРАЛЬНАЯ ЧАСТЬ: Что нового -->
+        <FrameLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="Что нового?"
-            android:textColor="#D81B60"
-            android:textSize="12sp"
-            android:minWidth="0dp"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"/>
+            android:layout_weight="1"
+            android:gravity="center">
+            <Button
+                android:id="@+id/whatsNewButton"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Что нового?"
+                android:textColor="#D81B60"
+                android:textSize="12sp"
+                android:minWidth="0dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"/>
+        </FrameLayout>
 
-        <Button
-            android:id="@+id/updateButton"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
+        <!-- ПРАВАЯ ЧАСТЬ: Обновить + Выход -->
+        <FrameLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="Обновить"
-            android:textColor="#4CAF50"
-            android:textSize="12sp"
-            android:minWidth="0dp"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:visibility="gone" />
-
-        <Button
-            android:id="@+id/exitButton"
-            android:layout_width="wrap_content"
-            android:layout_height="40dp"
-            android:text="✕"
-            android:textSize="16sp"
-            android:padding="0dp"
-            android:minWidth="40dp"
-            android:layout_marginStart="4dp"/>
+            android:layout_weight="1"
+            android:gravity="end|center_vertical">
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                
+                <Button
+                    android:id="@+id/updateButton"
+                    style="?android:attr/borderlessButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Обновить"
+                    android:textColor="#4CAF50"
+                    android:textSize="12sp"
+                    android:minWidth="0dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:visibility="gone" />
+                    
+                <Button
+                    android:id="@+id/exitButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="✕"
+                    android:textSize="16sp"
+                    android:padding="0dp"
+                    android:minWidth="40dp"
+                    android:layout_marginStart="4dp"/>
+            </LinearLayout>
+        </FrameLayout>
     </LinearLayout>
 
     <!-- Описание приложения -->
@@ -184,7 +211,7 @@
             android:layout_marginStart="4dp"/>
     </LinearLayout>
 
-    <!-- Таблица с результатами (занимает всё оставшееся место) -->
+    <!-- Таблица с результатами -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
