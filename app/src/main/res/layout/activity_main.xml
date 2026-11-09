@@ -3,25 +3,67 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/versionText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        android:textColor="#888888"
+        android:layout_marginBottom="8dp"/>
+
+    <RadioGroup
+        android:id="@+id/sourceGroup"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="8dp">
+        <RadioButton
+            android:id="@+id/radioGithub"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/source_github"
+            android:checked="true"
+            android:layout_marginEnd="16dp"/>
+        <RadioButton
+            android:id="@+id/radioCustom"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/source_custom"/>
+    </RadioGroup>
 
     <TextView
         android:id="@+id/networkText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Сеть: Wi-Fi"
         android:textSize="14sp"
         android:textColor="#666666"
         android:layout_marginBottom="4dp"/>
 
-    <TextView
-        android:id="@+id/statusText"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Готов к проверке"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="8dp"/>
+        android:orientation="horizontal"
+        android:layout_marginBottom="8dp"
+        android:gravity="center_vertical">
+        
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/status_ready"
+            android:textSize="16sp"
+            android:textStyle="bold"/>
+            
+        <Chronometer
+            android:id="@+id/chronometer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="16sp"
+            android:visibility="gone"/>
+    </LinearLayout>
 
     <ProgressBar
         android:id="@+id/progressBar"
@@ -32,71 +74,57 @@
         android:progress="0"
         android:layout_marginBottom="8dp"/>
 
-    <!-- Первый ряд: Онлайн и Стоп -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:layout_marginBottom="8dp">
-
         <Button
-            android:id="@+id/checkButton"
+            android:id="@+id/startButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Онлайн"
+            android:text="@string/btn_start"
             android:layout_marginEnd="4dp"/>
-
         <Button
             android:id="@+id/stopButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Стоп"
+            android:text="@string/btn_stop"
             android:enabled="false"
             android:backgroundTint="#9E9E9E"
             android:layout_marginStart="4dp"/>
     </LinearLayout>
 
-    <!-- Второй ряд: Свой файл и Копировать -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:layout_marginBottom="8dp">
-
         <Button
-            android:id="@+id/loadFileButton"
+            android:id="@+id/copyAllButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Свой файл"
+            android:text="@string/btn_copy_all"
             android:layout_marginEnd="4dp"/>
-
         <Button
-            android:id="@+id/copyButton"
+            android:id="@+id/exitButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Копировать"
+            android:text="@string/btn_exit"
+            android:backgroundTint="#424242"
             android:layout_marginStart="4dp"/>
     </LinearLayout>
 
-    <ScrollView
+    <!-- Таблица для результатов -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:background="#1E1E1E">
-
-        <TextView
-            android:id="@+id/resultText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textColor="#FFFFFF"
-            android:padding="12dp"
-            android:textSize="14sp"
-            android:autoLink="web"
-            android:linksClickable="true"/>
-    </ScrollView>
+        android:background="#1E1E1E"/>
 
 </LinearLayout>
