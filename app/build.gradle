@@ -10,34 +10,36 @@ android {
     namespace 'com.example.mtchecker'
     compileSdk 34
 
-defaultConfig {
-    applicationId "com.example.mtchecker"
-    minSdk 24
-    targetSdk 34
-    versionCode 1        // <--- ДОБАВИТЬ
-    versionName "1.0"    // <--- ДОБАВИТЬ
-     // ДОБАВИТЬ ЭТИ 2 СТРОЧКИ:
+    defaultConfig {
+        applicationId "com.example.mtchecker"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
+        // Автоматическая генерация времени сборки
         def buildTime = new SimpleDateFormat("dd.MM.yyyy HH:mm").format(new Date())
         buildConfigField "String", "BUILD_TIME", "\"${buildTime}\""
     }
-
-    // ДОБАВИТЬ ЭТОТ БЛОК (он включает генерацию BuildConfig):
-    buildFeatures {
-        buildConfig true
-    }
-}
 
     buildTypes {
         release {
             minifyEnabled false
         }
     }
+    
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+    
     kotlinOptions {
         jvmTarget = '17'
+    }
+    
+    // Блок для включения BuildConfig (должен быть внутри android)
+    buildFeatures {
+        buildConfig true
     }
 }
 
@@ -46,5 +48,5 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
-    implementation 'androidx.recyclerview:recyclerview:1.3.2' // <--- ДОБАВИТЬ
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
 }
