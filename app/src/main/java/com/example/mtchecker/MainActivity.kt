@@ -207,7 +207,7 @@ class MainActivity : AppCompatActivity() {
                         }
                     } else {
                         // Если у нас последняя версия - ПРЯЧЕМ кнопку
-                        updateButton.visibility = android.view.GONE
+                        updateButton.visibility = android.view.View.GONE
                         if (!silent) Toast.makeText(this@MainActivity, "У вас последняя версия!", Toast.LENGTH_SHORT).show()
                     }
                 }
