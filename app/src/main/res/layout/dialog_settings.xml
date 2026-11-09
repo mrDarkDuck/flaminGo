@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/settings_url_label"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/settingsUrl"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="https://..."
+        android:inputType="textUri"
+        android:layout_marginBottom="16dp"/>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/settings_depth_label"
+        android:textStyle="bold"
+        android:layout_marginBottom="4dp"/>
+
+    <RadioGroup
+        android:id="@+id/depthGroup"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginBottom="16dp">
+        <RadioButton android:id="@+id/depthAll" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/depth_all" android:checked="true"/>
+        <RadioButton android:id="@+id/depth1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/depth_1"/>
+        <RadioButton android:id="@+id/depth3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/depth_3"/>
+        <RadioButton android:id="@+id/depth5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/depth_5"/>
+    </RadioGroup>
+
+    <CheckBox
+        android:id="@+id/onlyFastCheck"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/settings_only_fast" />
+
+</LinearLayout>
