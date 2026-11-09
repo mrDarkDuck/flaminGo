@@ -3,7 +3,6 @@ package com.example.mtchecker
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
@@ -33,6 +32,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var radioGithub: RadioButton
     private lateinit var radioCustom: RadioButton
     private lateinit var recyclerView: RecyclerView
+    private lateinit var versionText: TextView
     private lateinit var adapter: ProxyAdapter
 
     private val url = "https://raw.githubusercontent.com/SoliSpirit/mtproto/master/all_proxies.txt"
@@ -49,7 +49,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Инициализация UI
+        // Инициализация UI элементов
         statusText = findViewById(R.id.statusText)
         networkText = findViewById(R.id.networkText)
         progressBar = findViewById(R.id.progressBar)
@@ -59,9 +59,10 @@ class MainActivity : AppCompatActivity() {
         radioGithub = findViewById(R.id.radioGithub)
         radioCustom = findViewById(R.id.radioCustom)
         recyclerView = findViewById(R.id.recyclerView)
-        versionText.text = getString(R.string.version_label, BuildConfig.VERSION_NAME, BuildConfig.BUILD_TIME)
+        versionText = findViewById(R.id.versionText)
         
-        versionText.text = getString(R.string.version_label, BuildConfig.VERSION_NAME)
+        // Установка текста версии (использует BuildConfig, который мы настроили в Gradle)
+        versionText.text = getString(R.string.version_label, BuildConfig.VERSION_NAME, BuildConfig.BUILD_TIME)
         networkText.text = getString(R.string.source_github) + " | ${getNetworkType()}"
 
         // Настройка таблицы
@@ -69,10 +70,16 @@ class MainActivity : AppCompatActivity() {
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
 
+        // Загружаем прошлый результат (если есть)
         loadSavedResult()
 
-        radioGithub.setOnClickListener { networkText.text = getString(R.string.source_github) + " | ${getNetworkType()}" }
-        radioCustom.setOnClickListener { getContent.launch("text/plain") }
+        // Слушатели кнопок и переключателей
+        radioGithub.setOnClickListener { 
+            networkText.text = getString(R.string.source_github) + " | ${getNetworkType()}" 
+        }
+        radioCustom.setOnClickListener { 
+            getContent.launch("text/plain") 
+        }
 
         startButton.setOnClickListener { startChecking() }
         stopButton.setOnClickListener { stopChecking() }
@@ -239,7 +246,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun saveResult(items: List<ProxyItem>) {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-        // Простое сохранение в строку (разделитель - символ переноса)
         val savedString = items.joinToString("|") { "${it.link};;${it.displayName};;${it.ping}" }
         prefs.edit().putString("last_result", savedString).apply()
     }
