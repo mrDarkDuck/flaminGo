@@ -20,7 +20,6 @@ class CheckService : Service() {
     private val CHANNEL_ID = "ProxyCheckChannel"
     private val NOTIFICATION_ID = 1
 
-    // СОХРАНЯЕМ СОСТОЯНИЕ ЗДЕСЬ, чтобы MainActivity могла его прочитать
     companion object {
         var isRunning = false
         var currentChecked = 0
@@ -38,6 +37,9 @@ class CheckService : Service() {
         val url = intent?.getStringExtra("url") ?: ""
         val customText = intent?.getStringExtra("customText")
         val isCustom = !customText.isNullOrEmpty()
+        val limit = intent?.getIntExtra("limit", 0) ?: 0
+        val onlyFast = intent?.getBooleanExtra("onlyFast", false) ?: false
+        val isReCheck = intent?.getBooleanExtra("isReCheck", false) ?: false
 
         isRunning = true
         currentChecked = 0
@@ -49,12 +51,12 @@ class CheckService : Service() {
         checkJob?.cancel()
         checkJob = serviceScope.launch {
             try {
-                val text = if (isCustom) customText!! else {
+                val text = if (isCustom || isReCheck) customText!! else {
                     val conn = URL(url).openConnection() as HttpURLConnection
                     conn.connect()
                     conn.inputStream.bufferedReader().use { it.readText() }
                 }
-                performChecks(text)
+                performChecks(text, limit, onlyFast)
             } catch (e: Exception) {
                 broadcastError(e.message ?: "Unknown error")
                 stopSelf()
@@ -64,7 +66,7 @@ class CheckService : Service() {
         return START_NOT_STICKY
     }
 
-    private suspend fun performChecks(text: String) {
+    private suspend fun performChecks(text: String, limit: Int, onlyFast: Boolean) {
         val regex = Regex("""server=([^&]+).*?port=(\d+)""")
         val proxies = regex.findAll(text).map { match ->
             val server = match.groupValues[1].trimEnd('.')
@@ -82,16 +84,24 @@ class CheckService : Service() {
 
         for ((server, port) in proxies) {
             if (!coroutineContext.isActive) break
+            
+            // Останавливаемся, если достигли лимита
+            if (limit > 0 && foundProxies.size >= limit) {
+                break
+            }
 
             val startTime = System.currentTimeMillis()
             if (isServerAlive(server, port)) {
                 val ping = System.currentTimeMillis() - startTime
-                val originalLine = text.lines().find { it.contains("server=$server") && it.contains("port=$port") }
                 
-                if (originalLine != null) {
-                    val item = ProxyItem(originalLine, "$server:$port", ping)
-                    foundProxies.add(item)
-                    broadcastResult(item)
+                // Фильтр "только быстрые" (меньше 150 мс)
+                if (!(onlyFast && ping >= 150)) {
+                    val originalLine = text.lines().find { it.contains("server=$server") && it.contains("port=$port") }
+                    if (originalLine != null) {
+                        val item = ProxyItem(originalLine, "$server:$port", ping)
+                        foundProxies.add(item)
+                        broadcastResult(item)
+                    }
                 }
             }
             currentChecked++
@@ -129,39 +139,37 @@ class CheckService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    // --- ОТПРАВКА СИГНАЛОВ (С УКАЗАНИЕМ ПАКЕТА) ---
-
     private fun broadcastProgress(checked: Int, total: Int) {
-        val intent = Intent("CHECK_PROGRESS")
-        intent.putExtra("checked", checked)
-        intent.putExtra("total", total)
-        intent.setPackage(packageName) // <-- Обязательно для Android 13+
+        val intent = Intent("CHECK_PROGRESS").apply {
+            putExtra("checked", checked)
+            putExtra("total", total)
+            setPackage(packageName)
+        }
         sendBroadcast(intent)
     }
 
     private fun broadcastResult(item: ProxyItem) {
-        val intent = Intent("CHECK_RESULT")
-        intent.putExtra("link", item.link)
-        intent.putExtra("displayName", item.displayName)
-        intent.putExtra("ping", item.ping)
-        intent.setPackage(packageName)
+        val intent = Intent("CHECK_RESULT").apply {
+            putExtra("link", item.link)
+            putExtra("displayName", item.displayName)
+            putExtra("ping", item.ping)
+            setPackage(packageName)
+        }
         sendBroadcast(intent)
     }
 
     private fun broadcastFinished() {
-        val intent = Intent("CHECK_FINISHED")
-        intent.setPackage(packageName)
+        val intent = Intent("CHECK_FINISHED").apply { setPackage(packageName) }
         sendBroadcast(intent)
     }
 
     private fun broadcastError(error: String) {
-        val intent = Intent("CHECK_ERROR")
-        intent.putExtra("error", error)
-        intent.setPackage(packageName)
+        val intent = Intent("CHECK_ERROR").apply {
+            putExtra("error", error)
+            setPackage(packageName)
+        }
         sendBroadcast(intent)
     }
-
-    // --- УВЕДОМЛЕНИЯ ---
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
