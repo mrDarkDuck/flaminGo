@@ -13,7 +13,7 @@ import androidx.recyclerview.widget.RecyclerView
 
 data class ProxyItem(val link: String, val displayName: String, val ping: Long)
 
-class ProxyAdapter(private val items: MutableList<ProxyItem>) : RecyclerView.Adapter<ProxyAdapter.ViewHolder>() {
+class ProxyAdapter(val items: MutableList<ProxyItem>) : RecyclerView.Adapter<ProxyAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val pingText: TextView = view.findViewById(R.id.pingText)
