@@ -5,19 +5,13 @@
     android:orientation="vertical"
     android:padding="12dp">
 
-    <!-- Верхняя панель: Настройки, Что нового, Выход -->
+    <!-- Верхняя панель: кнопки прижаты вправо -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="center_vertical"
+        android:gravity="end|center_vertical"
         android:layout_marginBottom="8dp">
-
-        <!-- Невидимый распорка, чтобы кнопки ушли вправо -->
-        <View
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"/>
 
         <Button
             android:id="@+id/settingsButton"
@@ -56,7 +50,6 @@
             android:paddingEnd="8dp"
             android:visibility="gone" />
 
-        <!-- Кнопка выхода с обычным фоном -->
         <Button
             android:id="@+id/exitButton"
             android:layout_width="wrap_content"
@@ -166,7 +159,7 @@
             android:layout_marginStart="4dp"/>
     </LinearLayout>
 
-    <!-- Кнопки Копировать и ReCheck (со стрелочкой) -->
+    <!-- Кнопки Копировать и ReCheck -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -191,7 +184,7 @@
             android:layout_marginStart="4dp"/>
     </LinearLayout>
 
-    <!-- Таблица с результатами -->
+    <!-- Таблица с результатами (занимает всё оставшееся место) -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
