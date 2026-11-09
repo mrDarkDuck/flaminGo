@@ -161,13 +161,12 @@ class MainActivity : AppCompatActivity() {
 
             findViewById<Button>(R.id.settingsButton).setOnClickListener { showSettingsDialog() }
 
-                       updateButton.setOnClickListener {
+            // Обработчик кнопки обновления с защитой от двойного нажатия
+            updateButton.setOnClickListener {
                 if (latestApkUrl != null) {
-                    // Визуально показываем, что процесс пошел
                     updateButton.isEnabled = false
-                    updateButton.text = "⏳" // Меняем иконку на песочные часы
-                    updateButton.alpha = 0.5f // Делаем ее полупрозрачной
-                    
+                    updateButton.text = "⏳"
+                    updateButton.alpha = 0.5f
                     downloadAndInstallApk(latestApkUrl!!)
                 } else {
                     Toast.makeText(this, "Подождите, проверяю ссылку...", Toast.LENGTH_SHORT).show()
@@ -192,22 +191,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // --- НОВАЯ ФУНКЦИЯ ПРОВЕРКИ ИНТЕРНЕТА ---
     private fun isNetworkAvailable(): Boolean {
         val network = connectivityManager.activeNetwork ?: return false
         val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-        // Проверяем, есть ли реальный доступ в интернет (а не просто подключение к Wi-Fi без интернета)
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
-    // --- ЛОГИКА АВТООБНОВЛЕНИЯ ---
     private fun checkForUpdates(silent: Boolean) {
-        if (!isNetworkAvailable()) return // Не проверяем обновления без интернета
+        if (!isNetworkAvailable()) return
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val url = URL("https://api.github.com/repos/mrDarkDarkDuck/flaminGo/releases/latest".replace("DarkDarkDuck", "DarkDuck")) // Фикс опечатки
+                // Всегда запрашиваем самый последний релиз
+                val url = URL("https://api.github.com/repos/mrDarkDuck/flaminGo/releases/latest")
                 val connection = url.openConnection() as HttpURLConnection
                 connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
                 connection.connectTimeout = 10000
@@ -227,7 +224,12 @@ class MainActivity : AppCompatActivity() {
                             AlertDialog.Builder(this@MainActivity)
                                 .setTitle("Доступно обновление!")
                                 .setMessage("Установлена версия V1.${BuildConfig.VERSION_CODE}. Доступна V1.$latestVersion.\nСкачать?")
-                                .setPositiveButton("Да") { _, _ -> latestApkUrl?.let { downloadAndInstallApk(it) } }
+                                .setPositiveButton("Да") { _, _ -> 
+                                    updateButton.isEnabled = false
+                                    updateButton.text = "⏳"
+                                    updateButton.alpha = 0.5f
+                                    latestApkUrl?.let { downloadAndInstallApk(it) } 
+                                }
                                 .setNegativeButton("Позже", null)
                                 .show()
                         }
@@ -237,18 +239,22 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             } catch (e: Exception) {
-                // Игнорируем ошибки сети при тихой проверке
+                // Игнорируем
             }
         }
     }
 
     private fun downloadAndInstallApk(apkUrl: String) {
         Toast.makeText(this, "Начинаю скачивание...", Toast.LENGTH_SHORT).show()
+        
+        // Уникальное имя файла для каждого обновления
+        val fileName = "update_${System.currentTimeMillis()}.apk"
+
         val request = DownloadManager.Request(Uri.parse(apkUrl))
         request.setTitle("FlaminGo Update")
         request.setDescription("Скачивание обновления...")
         request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-        request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "update.apk")
+        request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, fileName)
 
         val downloadManager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val downloadId = downloadManager.enqueue(request)
@@ -261,11 +267,17 @@ class MainActivity : AppCompatActivity() {
                     val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
                     if (status == DownloadManager.STATUS_SUCCESSFUL) {
                         isDownloading = false
-                        val file = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "update.apk")
+                        val file = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
                         withContext(Dispatchers.Main) { installApk(file) }
                     } else if (status == DownloadManager.STATUS_FAILED) {
                         isDownloading = false
-                        withContext(Dispatchers.Main) { Toast.makeText(this@MainActivity, "Ошибка скачивания", Toast.LENGTH_SHORT).show() }
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(this@MainActivity, "Ошибка скачивания. Попробуйте позже.", Toast.LENGTH_SHORT).show()
+                            // Возвращаем кнопку
+                            updateButton.isEnabled = true
+                            updateButton.text = "⬇️"
+                            updateButton.alpha = 1.0f
+                        }
                     }
                 }
                 cursor.close()
@@ -283,7 +295,6 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-    // --- СИСТЕМНЫЕ ФУНКЦИИ ---
     private fun checkAndRequestPermissions() {
         val permissions = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.READ_PHONE_STATE)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -428,7 +439,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startChecking() {
-        // ПРОВЕРКА ИНТЕРНЕТА ПЕРЕД СТАРТОМ
         if (!isNetworkAvailable()) {
             Toast.makeText(this, "Нет подключения к интернету. Проверьте настройки сети.", Toast.LENGTH_LONG).show()
             statusText.text = "Нет подключения к интернету"
@@ -444,7 +454,7 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val targetUrl = prefs.getString("list_url", defaultUrl) ?: defaultUrl
         val limit = prefs.getInt("check_limit", 0)
-        val onlyFast = prefs.getBoolean("only_fast", true)
+        val onlyFast = prefs.getBoolean("only_fast", true) // По умолчанию true
 
         prepareUiForCheck()
 
@@ -458,7 +468,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startRecheck() {
-        // ПРОВЕРКА ИНТЕРНЕТА ПЕРЕД ПЕРЕПРОВЕРКОЙ
         if (!isNetworkAvailable()) {
             Toast.makeText(this, "Нет подключения к интернету. Проверьте настройки сети.", Toast.LENGTH_LONG).show()
             statusText.text = "Нет подключения к интернету"
@@ -470,7 +479,7 @@ class MainActivity : AppCompatActivity() {
         val linksToRecheck = adapter.items.joinToString("\n") { it.link }
         
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-        val onlyFast = prefs.getBoolean("only_fast", false)
+        val onlyFast = prefs.getBoolean("only_fast", true) // По умолчанию true
 
         prepareUiForCheck()
 
@@ -522,7 +531,7 @@ class MainActivity : AppCompatActivity() {
             5 -> depthGroup.check(R.id.depth5)
             else -> depthGroup.check(R.id.depthAll)
         }
-        onlyFastCheck.isChecked = prefs.getBoolean("only_fast", false)
+        onlyFastCheck.isChecked = prefs.getBoolean("only_fast", true) // По умолчанию true
 
         AlertDialog.Builder(this)
             .setTitle(R.string.settings_title)
