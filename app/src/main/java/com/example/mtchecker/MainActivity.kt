@@ -444,7 +444,7 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val targetUrl = prefs.getString("list_url", defaultUrl) ?: defaultUrl
         val limit = prefs.getInt("check_limit", 0)
-        val onlyFast = prefs.getBoolean("only_fast", false)
+        val onlyFast = prefs.getBoolean("only_fast", true)
 
         prepareUiForCheck()
 
