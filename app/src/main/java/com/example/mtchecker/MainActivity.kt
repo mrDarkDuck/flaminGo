@@ -123,7 +123,8 @@ class MainActivity : AppCompatActivity() {
         recyclerView = findViewById(R.id.recyclerView)
         versionText = findViewById(R.id.versionText)
         
-        versionText.text = "Версия: ${BuildConfig.VERSION_NAME}"
+        // Формат версии: V1.65
+        versionText.text = "V${BuildConfig.VERSION_NAME}"
 
         adapter = ProxyAdapter(mutableListOf())
         recyclerView.layoutManager = LinearLayoutManager(this)
@@ -164,7 +165,6 @@ class MainActivity : AppCompatActivity() {
             showChangelogDialog(changelogUrl)
         }
 
-        // ТИХАЯ ПРОВЕРКА ОБНОВЛЕНИЙ ПРИ ЗАПУСКЕ
         checkForUpdates(silent = true)
     }
 
@@ -185,12 +185,11 @@ class MainActivity : AppCompatActivity() {
 
                 withContext(Dispatchers.Main) {
                     if (latestVersion > BuildConfig.VERSION_CODE) {
-                        // Нашли новую версию! Показываем кнопку
                         updateButton.visibility = android.view.View.VISIBLE
                         if (!silent) {
                             AlertDialog.Builder(this@MainActivity)
                                 .setTitle("Доступно обновление!")
-                                .setMessage("Установлена версия 1.${BuildConfig.VERSION_CODE}. Доступна 1.$latestVersion.\nСкачать?")
+                                .setMessage("Установлена версия V1.${BuildConfig.VERSION_CODE}. Доступна V1.$latestVersion.\nСкачать?")
                                 .setPositiveButton("Да") { _, _ -> latestApkUrl?.let { downloadAndInstallApk(it) } }
                                 .setNegativeButton("Позже", null)
                                 .show()
@@ -437,6 +436,7 @@ class MainActivity : AppCompatActivity() {
         recheckButton.isEnabled = false
         radioGithub.isEnabled = false
         radioCustom.isEnabled = false
+        progressBar.max = 100
         progressBar.progress = 0
         adapter.clear()
         statusText.text = "Запуск сервиса..."
@@ -516,6 +516,10 @@ class MainActivity : AppCompatActivity() {
         val lastDate = prefs.getString("last_check_date_$netId", "") ?: ""
         
         adapter.clear()
+        
+        // СБРАСЫВАЕМ ПРОГРЕСС-БАР
+        progressBar.max = 100
+        progressBar.progress = 0
         
         if (saved.isNotEmpty()) {
             val items = saved.split("|").mapNotNull { 
