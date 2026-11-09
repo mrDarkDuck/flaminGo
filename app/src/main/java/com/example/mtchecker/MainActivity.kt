@@ -1,15 +1,14 @@
 package com.example.mtchecker
 
 import android.Manifest
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
+import android.content.*
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.telephony.TelephonyManager
@@ -17,15 +16,13 @@ import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.*
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.InetSocketAddress
-import java.net.Socket
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -48,18 +45,17 @@ class MainActivity : AppCompatActivity() {
     private val url = "https://raw.githubusercontent.com/SoliSpirit/mtproto/master/all_proxies.txt"
     private val prefsName = "MtCheckerPrefs"
     
-    private var checkJob: Job? = null
     private var customText: String? = null
     private var currentCheckNetwork = ""
+    private var isServiceRunning = false
 
     private val getContent = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { processFile(it) }
     }
 
-    // Обработчик разрешений (неважно, разрешил пользователь или нет, мы просто продолжаем работу)
     private val requestPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { 
         updateNetworkText()
-        if (checkJob?.isActive != true) loadSavedResult()
+        if (!isServiceRunning) loadSavedResult()
     }
 
     private val connectivityManager by lazy { getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager }
@@ -67,7 +63,41 @@ class MainActivity : AppCompatActivity() {
         override fun onAvailable(network: Network) {
             runOnUiThread {
                 updateNetworkText()
-                if (checkJob?.isActive != true) loadSavedResult()
+                if (!isServiceRunning) loadSavedResult()
+            }
+        }
+    }
+
+    // Слушаем сигналы от Сервиса
+    private val serviceReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                "CHECK_PROGRESS" -> {
+                    val checked = intent.getIntExtra("checked", 0)
+                    val total = intent.getIntExtra("total", 0)
+                    progressBar.max = total
+                    progressBar.progress = checked
+                    statusText.text = getString(R.string.status_checking, checked, total)
+                }
+                "CHECK_RESULT" -> {
+                    val link = intent.getStringExtra("link") ?: return
+                    val name = intent.getStringExtra("displayName") ?: return
+                    val ping = intent.getLongExtra("ping", 0L)
+                    adapter.addItem(ProxyItem(link, name, ping))
+                }
+                "CHECK_FINISHED" -> {
+                    isServiceRunning = false
+                    statusText.text = getString(R.string.status_done, adapter.itemCount)
+                    chronometer.stop()
+                    resetButtons()
+                    saveResult(adapter.items, currentCheckNetwork)
+                }
+                "CHECK_ERROR" -> {
+                    isServiceRunning = false
+                    val error = intent.getStringExtra("error") ?: "Unknown error"
+                    statusText.text = "Error: $error"
+                    resetButtons()
+                }
             }
         }
     }
@@ -111,7 +141,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.exitButton).setOnClickListener {
-            checkJob?.cancel()
+            stopService(Intent(this, CheckService::class.java))
             saveResult(adapter.items, currentCheckNetwork.ifEmpty { getNetworkIdentifier() })
             finishAffinity()
         }
@@ -123,74 +153,85 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkAndRequestPermissions() {
-        val permissions = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.READ_PHONE_STATE)
+        val permissions = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION, 
+            Manifest.permission.READ_PHONE_STATE
+        )
+        // Для Android 13+ нужно спрашивать разрешение на уведомления
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
         val allGranted = permissions.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
         
         if (allGranted) {
             updateNetworkText()
             loadSavedResult()
         } else {
-            requestPermissions.launch(permissions)
+            requestPermissions.launch(permissions.toTypedArray())
         }
     }
 
-    override fun onResume() {
-        super.onResume()
+    override fun onStart() {
+        super.onStart()
+        // Регистрируем приемник сигналов от сервиса
+        val filter = IntentFilter().apply {
+            addAction("CHECK_PROGRESS")
+            addAction("CHECK_RESULT")
+            addAction("CHECK_FINISHED")
+            addAction("CHECK_ERROR")
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(serviceReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(serviceReceiver, filter)
+        }
+        
         connectivityManager.registerDefaultNetworkCallback(networkCallback)
-        // Обновляем только если приложение уже инициализировано
         if (::adapter.isInitialized) {
             updateNetworkText()
-            if (checkJob?.isActive != true) loadSavedResult()
+            if (!isServiceRunning) loadSavedResult()
         }
-    }
-
-    override fun onPause() {
-        super.onPause()
-        connectivityManager.unregisterNetworkCallback(networkCallback)
     }
 
     override fun onStop() {
         super.onStop()
+        // Отписываемся от сигналов, чтобы не течь памяти
+        try { unregisterReceiver(serviceReceiver) } catch (e: Exception) {}
+        connectivityManager.unregisterNetworkCallback(networkCallback)
         if (::adapter.isInitialized) {
             saveResult(adapter.items, currentCheckNetwork.ifEmpty { getNetworkIdentifier() })
         }
     }
 
-    // Получаем имя сети БЕЗОПАСНО (чтобы не вылетало)
     private fun getNetworkName(): String {
         val network = connectivityManager.activeNetwork ?: return "No Net"
         val caps = connectivityManager.getNetworkCapabilities(network) ?: return "Unknown"
         
         if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-            // Проверяем, дал ли пользователь разрешение на геолокацию
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                 try {
                     val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
                     @Suppress("DEPRECATION")
                     val ssid = wifiManager.connectionInfo.ssid.replace("\"", "")
-                    if (ssid != "<unknown ssid>" && ssid.isNotEmpty()) {
-                        return "Wi-Fi: $ssid"
-                    }
-                } catch (e: Exception) { /* Игнорируем ошибки */ }
+                    if (ssid != "<unknown ssid>" && ssid.isNotEmpty()) return "Wi-Fi: $ssid"
+                } catch (e: Exception) {}
             }
-            return "Wi-Fi" // Если нет разрешения или ошибка
+            return "Wi-Fi"
         } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
-            // Проверяем разрешение на чтение данных телефона
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
                 try {
                     val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
                     val carrier = tm.networkOperatorName
-                    if (!carrier.isNullOrEmpty()) {
-                        return "Mobile: $carrier"
-                    }
-                } catch (e: Exception) { /* Игнорируем ошибки */ }
+                    if (!carrier.isNullOrEmpty()) return "Mobile: $carrier"
+                } catch (e: Exception) {}
             }
-            return "Mobile" // Если нет разрешения или ошибка
+            return "Mobile"
         }
         return "Other"
     }
 
-    // Идентификатор сети для сохранения (заменяет недопустимые символы)
     private fun getNetworkIdentifier(): String {
         return getNetworkName().replace("[^a-zA-Z0-9а-яА-Я]".toRegex(), "_")
     }
@@ -201,7 +242,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopChecking() {
-        checkJob?.cancel()
+        stopService(Intent(this, CheckService::class.java))
+        isServiceRunning = false
         chronometer.stop()
         statusText.text = "Stopped"
         resetButtons()
@@ -238,6 +280,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        isServiceRunning = true
         currentCheckNetwork = getNetworkIdentifier()
 
         startButton.isEnabled = false
@@ -246,95 +289,22 @@ class MainActivity : AppCompatActivity() {
         radioCustom.isEnabled = false
         progressBar.progress = 0
         adapter.clear()
-        statusText.text = "Downloading..."
+        statusText.text = "Starting service..."
         
         chronometer.base = SystemClock.elapsedRealtime()
         chronometer.start()
         chronometer.visibility = android.view.View.VISIBLE
 
-        checkJob = CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val text = if (isCustom) customText!! else {
-                    val conn = URL(url).openConnection() as HttpURLConnection
-                    conn.connect()
-                    conn.inputStream.bufferedReader().use { it.readText() }
-                }
-                
-                withContext(Dispatchers.Main) {
-                    startCheckFromText(text)
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    statusText.text = "Error: ${e.message}"
-                    resetButtons()
-                }
-            }
+        // Запускаем Сервис
+        val serviceIntent = Intent(this, CheckService::class.java).apply {
+            putExtra("url", url)
+            if (isCustom) putExtra("customText", customText)
         }
-    }
-
-    private fun startCheckFromText(text: String) {
-        val regex = Regex("""server=([^&]+).*?port=(\d+)""")
-        val proxies = regex.findAll(text).map { match ->
-            val server = match.groupValues[1].trimEnd('.')
-            val port = match.groupValues[2].toInt()
-            Pair(server, port)
-        }.toList().distinct()
-
-        if (proxies.isEmpty()) {
-            statusText.text = "No proxies found"
-            resetButtons()
-            return
-        }
-
-        progressBar.max = proxies.size
-
-        CoroutineScope(Dispatchers.IO).launch {
-            var checkedCount = 0
-            for ((server, port) in proxies) {
-                if (!isActive) break
-
-                val startTime = System.currentTimeMillis()
-                if (isServerAlive(server, port)) {
-                    val ping = System.currentTimeMillis() - startTime
-                    val originalLine = text.lines().find { it.contains("server=$server") && it.contains("port=$port") }
-                    
-                    if (originalLine != null) {
-                        withContext(Dispatchers.Main) {
-                            adapter.addItem(ProxyItem(originalLine, "$server:$port", ping))
-                        }
-                    }
-                }
-                checkedCount++
-                
-                if (checkedCount % 5 == 0 || checkedCount == proxies.size) {
-                    val progress = checkedCount
-                    val total = proxies.size
-                    withContext(Dispatchers.Main) {
-                        progressBar.progress = progress
-                        statusText.text = getString(R.string.status_checking, progress, total)
-                    }
-                }
-            }
-
-            withContext(Dispatchers.Main) {
-                if (isActive) {
-                    statusText.text = getString(R.string.status_done, adapter.itemCount)
-                    chronometer.stop()
-                    resetButtons()
-                    saveResult(adapter.items, currentCheckNetwork)
-                }
-            }
-        }
-    }
-
-    private fun isServerAlive(host: String, port: Int): Boolean {
-        return try {
-            val socket = Socket()
-            socket.connect(InetSocketAddress(host, port), 3000)
-            socket.close()
-            true
-        } catch (e: Exception) {
-            false
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
         }
     }
 
