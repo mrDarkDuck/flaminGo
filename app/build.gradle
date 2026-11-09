@@ -16,6 +16,15 @@ defaultConfig {
     targetSdk 34
     versionCode 1        // <--- ДОБАВИТЬ
     versionName "1.0"    // <--- ДОБАВИТЬ
+     // ДОБАВИТЬ ЭТИ 2 СТРОЧКИ:
+        def buildTime = new SimpleDateFormat("dd.MM.yyyy HH:mm").format(new Date())
+        buildConfigField "String", "BUILD_TIME", "\"${buildTime}\""
+    }
+
+    // ДОБАВИТЬ ЭТОТ БЛОК (он включает генерацию BuildConfig):
+    buildFeatures {
+        buildConfig true
+    }
 }
 
     buildTypes {
