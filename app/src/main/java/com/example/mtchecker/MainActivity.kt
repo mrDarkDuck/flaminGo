@@ -161,8 +161,17 @@ class MainActivity : AppCompatActivity() {
 
             findViewById<Button>(R.id.settingsButton).setOnClickListener { showSettingsDialog() }
 
-            updateButton.setOnClickListener {
-                latestApkUrl?.let { downloadAndInstallApk(it) }
+                       updateButton.setOnClickListener {
+                if (latestApkUrl != null) {
+                    // Визуально показываем, что процесс пошел
+                    updateButton.isEnabled = false
+                    updateButton.text = "⏳" // Меняем иконку на песочные часы
+                    updateButton.alpha = 0.5f // Делаем ее полупрозрачной
+                    
+                    downloadAndInstallApk(latestApkUrl!!)
+                } else {
+                    Toast.makeText(this, "Подождите, проверяю ссылку...", Toast.LENGTH_SHORT).show()
+                }
             }
 
             findViewById<Button>(R.id.exitButton).setOnClickListener {
