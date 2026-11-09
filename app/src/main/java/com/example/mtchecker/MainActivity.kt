@@ -16,7 +16,6 @@ import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -46,8 +45,6 @@ class MainActivity : AppCompatActivity() {
     private val prefsName = "MtCheckerPrefs"
     
     private var customText: String? = null
-    private var currentCheckNetwork = ""
-    private var isServiceRunning = false
 
     private val getContent = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { processFile(it) }
@@ -55,7 +52,7 @@ class MainActivity : AppCompatActivity() {
 
     private val requestPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { 
         updateNetworkText()
-        if (!isServiceRunning) loadSavedResult()
+        if (!CheckService.isRunning) loadSavedResult()
     }
 
     private val connectivityManager by lazy { getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager }
@@ -63,12 +60,11 @@ class MainActivity : AppCompatActivity() {
         override fun onAvailable(network: Network) {
             runOnUiThread {
                 updateNetworkText()
-                if (!isServiceRunning) loadSavedResult()
+                if (!CheckService.isRunning) loadSavedResult()
             }
         }
     }
 
-    // Слушаем сигналы от Сервиса
     private val serviceReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
@@ -86,14 +82,14 @@ class MainActivity : AppCompatActivity() {
                     adapter.addItem(ProxyItem(link, name, ping))
                 }
                 "CHECK_FINISHED" -> {
-                    isServiceRunning = false
+                    CheckService.isRunning = false
                     statusText.text = getString(R.string.status_done, adapter.itemCount)
                     chronometer.stop()
                     resetButtons()
-                    saveResult(adapter.items, currentCheckNetwork)
+                    saveResult(adapter.items, CheckService.currentNetworkId.ifEmpty { getNetworkIdentifier() })
                 }
                 "CHECK_ERROR" -> {
-                    isServiceRunning = false
+                    CheckService.isRunning = false
                     val error = intent.getStringExtra("error") ?: "Unknown error"
                     statusText.text = "Error: $error"
                     resetButtons()
@@ -142,7 +138,7 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.exitButton).setOnClickListener {
             stopService(Intent(this, CheckService::class.java))
-            saveResult(adapter.items, currentCheckNetwork.ifEmpty { getNetworkIdentifier() })
+            saveResult(adapter.items, CheckService.currentNetworkId.ifEmpty { getNetworkIdentifier() })
             finishAffinity()
         }
 
@@ -157,7 +153,6 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.ACCESS_FINE_LOCATION, 
             Manifest.permission.READ_PHONE_STATE
         )
-        // Для Android 13+ нужно спрашивать разрешение на уведомления
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -174,7 +169,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        // Регистрируем приемник сигналов от сервиса
+        // Регистрируем приемник
         val filter = IntentFilter().apply {
             addAction("CHECK_PROGRESS")
             addAction("CHECK_RESULT")
@@ -189,19 +184,43 @@ class MainActivity : AppCompatActivity() {
         }
         
         connectivityManager.registerDefaultNetworkCallback(networkCallback)
+        
         if (::adapter.isInitialized) {
             updateNetworkText()
-            if (!isServiceRunning) loadSavedResult()
+            
+            // ВОССТАНАВЛИВАЕМ СОСТОЯНИЕ ИЗ ПАМЯТИ СЕРВИСА
+            if (CheckService.isRunning || CheckService.currentTotal > 0) {
+                adapter.clear()
+                adapter.items.addAll(CheckService.foundProxies)
+                adapter.notifyDataSetChanged()
+                
+                progressBar.max = CheckService.currentTotal
+                progressBar.progress = CheckService.currentChecked
+                
+                if (CheckService.isRunning) {
+                    statusText.text = getString(R.string.status_checking, CheckService.currentChecked, CheckService.currentTotal)
+                    startButton.isEnabled = false
+                    stopButton.isEnabled = true
+                    radioGithub.isEnabled = false
+                    radioCustom.isEnabled = false
+                    chronometer.visibility = android.view.View.VISIBLE
+                } else {
+                    statusText.text = getString(R.string.status_done, adapter.itemCount)
+                    resetButtons()
+                    saveResult(adapter.items, CheckService.currentNetworkId.ifEmpty { getNetworkIdentifier() })
+                }
+            } else {
+                loadSavedResult()
+            }
         }
     }
 
     override fun onStop() {
         super.onStop()
-        // Отписываемся от сигналов, чтобы не течь памяти
         try { unregisterReceiver(serviceReceiver) } catch (e: Exception) {}
         connectivityManager.unregisterNetworkCallback(networkCallback)
         if (::adapter.isInitialized) {
-            saveResult(adapter.items, currentCheckNetwork.ifEmpty { getNetworkIdentifier() })
+            saveResult(adapter.items, CheckService.currentNetworkId.ifEmpty { getNetworkIdentifier() })
         }
     }
 
@@ -243,11 +262,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun stopChecking() {
         stopService(Intent(this, CheckService::class.java))
-        isServiceRunning = false
+        CheckService.isRunning = false
         chronometer.stop()
         statusText.text = "Stopped"
         resetButtons()
-        saveResult(adapter.items, currentCheckNetwork)
+        saveResult(adapter.items, CheckService.currentNetworkId.ifEmpty { getNetworkIdentifier() })
     }
 
     private fun resetButtons() {
@@ -280,8 +299,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        isServiceRunning = true
-        currentCheckNetwork = getNetworkIdentifier()
+        val netId = getNetworkIdentifier()
+        CheckService.currentNetworkId = netId
 
         startButton.isEnabled = false
         stopButton.isEnabled = true
@@ -295,7 +314,6 @@ class MainActivity : AppCompatActivity() {
         chronometer.start()
         chronometer.visibility = android.view.View.VISIBLE
 
-        // Запускаем Сервис
         val serviceIntent = Intent(this, CheckService::class.java).apply {
             putExtra("url", url)
             if (isCustom) putExtra("customText", customText)
