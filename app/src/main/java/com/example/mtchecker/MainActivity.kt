@@ -59,7 +59,7 @@ class MainActivity : AppCompatActivity() {
         radioGithub = findViewById(R.id.radioGithub)
         radioCustom = findViewById(R.id.radioCustom)
         recyclerView = findViewById(R.id.recyclerView)
-        val versionText = findViewById<TextView>(R.id.versionText)
+        versionText.text = getString(R.string.version_label, BuildConfig.VERSION_NAME, BuildConfig.BUILD_TIME)
         
         versionText.text = getString(R.string.version_label, BuildConfig.VERSION_NAME)
         networkText.text = getString(R.string.source_github) + " | ${getNetworkType()}"
