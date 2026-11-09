@@ -13,4 +13,16 @@
     <string name="version_label">Версия: %1$s | Сборка: %2$s</string>
     <string name="network_wifi">Wi-Fi</string>
     <string name="network_cell">Мобильная</string>
+    <string name="btn_settings">Настройки</string>
+    <string name="btn_recheck">Перепроверить</string>
+    <string name="settings_title">Настройки</string>
+    <string name="settings_url_label">Ссылка на оф. список:</string>
+    <string name="settings_depth_label">Глубина проверки:</string>
+    <string name="settings_only_fast">Показывать только быстрые (пинг &lt; 150мс)</string>
+    <string name="depth_all">Весь список</string>
+    <string name="depth_1">До 1 рабочей</string>
+    <string name="depth_3">До 3 рабочих</string>
+    <string name="depth_5">До 5 рабочих</string>
+    <string name="settings_save">Сохранить</string>
+    <string name="settings_cancel">Отмена</string>
 </resources>
