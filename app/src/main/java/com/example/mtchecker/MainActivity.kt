@@ -61,7 +61,7 @@ class MainActivity : AppCompatActivity() {
         recyclerView = findViewById(R.id.recyclerView)
         versionText = findViewById(R.id.versionText)
         
-        // Установка текста версии (использует BuildConfig, который мы настроили в Gradle)
+        // Установка текста версии
         versionText.text = getString(R.string.version_label, BuildConfig.VERSION_NAME, BuildConfig.BUILD_TIME)
         networkText.text = getString(R.string.source_github) + " | ${getNetworkType()}"
 
@@ -70,10 +70,10 @@ class MainActivity : AppCompatActivity() {
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
 
-        // Загружаем прошлый результат (если есть)
+        // Загружаем прошлый результат
         loadSavedResult()
 
-        // Слушатели кнопок и переключателей
+        // Слушатели кнопок
         radioGithub.setOnClickListener { 
             networkText.text = getString(R.string.source_github) + " | ${getNetworkType()}" 
         }
@@ -84,10 +84,6 @@ class MainActivity : AppCompatActivity() {
         startButton.setOnClickListener { startChecking() }
         stopButton.setOnClickListener { stopChecking() }
         
-        findViewById<Button>(R.id.exitButton).setOnClickListener { 
-            finishAffinity()
-        }
-        
         findViewById<Button>(R.id.copyAllButton).setOnClickListener {
             val allLinks = adapter.items.joinToString("\n\n") { it.link }
             if (allLinks.isNotEmpty()) {
@@ -96,6 +92,27 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Copied!", Toast.LENGTH_SHORT).show()
             }
         }
+
+        // Новая кнопка Выхода (крестик)
+        findViewById<Button>(R.id.exitButton).setOnClickListener {
+            checkJob?.cancel() // Останавливаем проверку, если идет
+            saveResult(adapter.items) // СОХРАНЯЕМ ПЕРЕД ВЫХОДОМ
+            finishAffinity()
+        }
+
+        // Кнопка "Что нового"
+        findViewById<Button>(R.id.whatsNewButton).setOnClickListener {
+            val url = "https://github.com/mrDarkDuck/flaminGo/releases" // Ссылка на ваш репозиторий
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+            intent.data = Uri.parse(url)
+            startActivity(intent)
+        }
+    }
+
+    // Сохраняем список, если приложение свернули или убили системой
+    override fun onStop() {
+        super.onStop()
+        saveResult(adapter.items)
     }
 
     private fun stopChecking() {
@@ -103,6 +120,7 @@ class MainActivity : AppCompatActivity() {
         chronometer.stop()
         statusText.text = "Stopped"
         resetButtons()
+        saveResult(adapter.items)
     }
 
     private fun resetButtons() {
