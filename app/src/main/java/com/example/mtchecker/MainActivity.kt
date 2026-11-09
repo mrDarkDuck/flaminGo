@@ -1,17 +1,23 @@
 package com.example.mtchecker
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.Uri
+import android.net.wifi.WifiManager
 import android.os.Bundle
 import android.os.SystemClock
+import android.telephony.TelephonyManager
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.*
@@ -44,16 +50,32 @@ class MainActivity : AppCompatActivity() {
     
     private var checkJob: Job? = null
     private var customText: String? = null
+    private var currentCheckNetwork = ""
 
     private val getContent = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { processFile(it) }
+    }
+
+    // Запрос разрешений на геолокацию и данные телефона
+    private val requestPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { 
+        updateNetworkText()
+        if (checkJob?.isActive != true) loadSavedResult()
+    }
+
+    private val connectivityManager by lazy { getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager }
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            runOnUiThread {
+                updateNetworkText()
+                if (checkJob?.isActive != true) loadSavedResult()
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Инициализация UI элементов
         statusText = findViewById(R.id.statusText)
         networkText = findViewById(R.id.networkText)
         progressBar = findViewById(R.id.progressBar)
@@ -65,25 +87,17 @@ class MainActivity : AppCompatActivity() {
         recyclerView = findViewById(R.id.recyclerView)
         versionText = findViewById(R.id.versionText)
         
-        // Установка текста версии
         versionText.text = getString(R.string.version_label, BuildConfig.VERSION_NAME, BuildConfig.BUILD_TIME)
-        networkText.text = getString(R.string.source_github) + " | ${getNetworkType()}"
 
-        // Настройка таблицы
         adapter = ProxyAdapter(mutableListOf())
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
 
-        // Загружаем прошлый результат
-        loadSavedResult()
+        // Проверяем разрешения при старте
+        checkAndRequestPermissions()
 
-        // Слушатели кнопок и переключателей
-        radioGithub.setOnClickListener { 
-            networkText.text = getString(R.string.source_github) + " | ${getNetworkType()}" 
-        }
-        radioCustom.setOnClickListener { 
-            getContent.launch("text/plain") 
-        }
+        radioGithub.setOnClickListener { updateNetworkText() }
+        radioCustom.setOnClickListener { getContent.launch("text/plain") }
 
         startButton.setOnClickListener { startChecking() }
         stopButton.setOnClickListener { stopChecking() }
@@ -97,24 +111,75 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Кнопка Выхода (крестик)
         findViewById<Button>(R.id.exitButton).setOnClickListener {
             checkJob?.cancel()
-            saveResult(adapter.items)
+            saveResult(adapter.items, currentCheckNetwork.ifEmpty { getNetworkIdentifier() })
             finishAffinity()
         }
 
-        // Кнопка "Что нового"
         findViewById<Button>(R.id.whatsNewButton).setOnClickListener {
             val changelogUrl = "https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/CHANGELOG.md"
             showChangelogDialog(changelogUrl)
         }
     }
 
-    // Сохраняем список, если приложение свернули или убили системой
+    private fun checkAndRequestPermissions() {
+        val permissions = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.READ_PHONE_STATE)
+        val allGranted = permissions.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
+        
+        if (allGranted) {
+            updateNetworkText()
+            loadSavedResult()
+        } else {
+            requestPermissions.launch(permissions)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        connectivityManager.registerDefaultNetworkCallback(networkCallback)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            updateNetworkText()
+            if (checkJob?.isActive != true) loadSavedResult()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        connectivityManager.unregisterNetworkCallback(networkCallback)
+    }
+
     override fun onStop() {
         super.onStop()
-        saveResult(adapter.items)
+        saveResult(adapter.items, currentCheckNetwork.ifEmpty { getNetworkIdentifier() })
+    }
+
+    // Получаем человекочитаемое имя сети (для экрана)
+    private fun getNetworkName(): String {
+        val network = connectivityManager.activeNetwork ?: return "No Net"
+        val caps = connectivityManager.getNetworkCapabilities(network) ?: return "Unknown"
+        
+        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            @Suppress("DEPRECATION")
+            val ssid = wifiManager.connectionInfo.ssid.replace("\"", "")
+            return if (ssid == "<unknown ssid>" || ssid.isEmpty()) "Wi-Fi" else "Wi-Fi: $ssid"
+        } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+            val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+            val carrier = tm.networkOperatorName
+            return if (carrier.isNullOrEmpty()) "Mobile" else "Mobile: $carrier"
+        }
+        return "Other"
+    }
+
+    // Получаем ID сети для сохранения в память (без пробелов и спецсимволов)
+    private fun getNetworkIdentifier(): String {
+        return getNetworkName().replace("[^a-zA-Z0-9а-яА-Я]".toRegex(), "_")
+    }
+
+    private fun updateNetworkText() {
+        val source = if (radioCustom.isChecked) getString(R.string.source_custom) else getString(R.string.source_github)
+        networkText.text = "$source | ${getNetworkName()}"
     }
 
     private fun stopChecking() {
@@ -122,7 +187,7 @@ class MainActivity : AppCompatActivity() {
         chronometer.stop()
         statusText.text = "Stopped"
         resetButtons()
-        saveResult(adapter.items)
+        saveResult(adapter.items, currentCheckNetwork)
     }
 
     private fun resetButtons() {
@@ -133,17 +198,6 @@ class MainActivity : AppCompatActivity() {
         radioCustom.isEnabled = true
     }
 
-    private fun getNetworkType(): String {
-        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = cm.activeNetwork ?: return "No Net"
-        val capabilities = cm.getNetworkCapabilities(network) ?: return "Unknown"
-        return when {
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> getString(R.string.network_wifi)
-            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> getString(R.string.network_cell)
-            else -> "Other"
-        }
-    }
-
     private fun processFile(uri: Uri) {
         try {
             val inputStream = contentResolver.openInputStream(uri)
@@ -151,7 +205,7 @@ class MainActivity : AppCompatActivity() {
             customText = reader.readText()
             reader.close()
             inputStream?.close()
-            networkText.text = getString(R.string.source_custom) + " | ${getNetworkType()}"
+            updateNetworkText()
             radioCustom.isChecked = true
         } catch (e: Exception) {
             Toast.makeText(this, "File error: ${e.message}", Toast.LENGTH_LONG).show()
@@ -165,6 +219,8 @@ class MainActivity : AppCompatActivity() {
             getContent.launch("text/plain")
             return
         }
+
+        currentCheckNetwork = getNetworkIdentifier() // Запоминаем ID сети
 
         startButton.isEnabled = false
         stopButton.isEnabled = true
@@ -247,7 +303,7 @@ class MainActivity : AppCompatActivity() {
                     statusText.text = getString(R.string.status_done, adapter.itemCount)
                     chronometer.stop()
                     resetButtons()
-                    saveResult(adapter.items)
+                    saveResult(adapter.items, currentCheckNetwork)
                 }
             }
         }
@@ -264,25 +320,28 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // СОХРАНЕНИЕ РЕЗУЛЬТАТА И ДАТЫ
-    private fun saveResult(items: List<ProxyItem>) {
+    // СОХРАНЕНИЕ ПОД КЛЮЧОМ КОНКРЕТНОЙ СЕТИ
+    private fun saveResult(items: List<ProxyItem>, netId: String) {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val savedString = items.joinToString("|") { "${it.link};;${it.displayName};;${it.ping}" }
-        
-        // Генерируем текущую дату
         val dateStr = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
         
         prefs.edit()
-            .putString("last_result", savedString)
-            .putString("last_check_date", dateStr)
+            .putString("last_result_$netId", savedString)
+            .putString("last_check_date_$netId", dateStr)
             .apply()
     }
 
-    // ЗАГРУЗКА РЕЗУЛЬТАТА И ДАТЫ ПРИ СТАРТЕ
+    // ЗАГРУЗКА ПОД КЛЮЧОМ КОНКРЕТНОЙ СЕТИ
     private fun loadSavedResult() {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-        val saved = prefs.getString("last_result", "") ?: ""
-        val lastDate = prefs.getString("last_check_date", "") ?: ""
+        val netId = getNetworkIdentifier()
+        val netName = getNetworkName()
+        
+        val saved = prefs.getString("last_result_$netId", "") ?: ""
+        val lastDate = prefs.getString("last_check_date_$netId", "") ?: ""
+        
+        adapter.clear()
         
         if (saved.isNotEmpty()) {
             val items = saved.split("|").mapNotNull { 
@@ -292,10 +351,11 @@ class MainActivity : AppCompatActivity() {
             adapter.items.addAll(items)
             adapter.notifyDataSetChanged()
             
-            // Выводим дату последней проверки, если она есть
             if (lastDate.isNotEmpty()) {
-                statusText.text = "Последняя проверка: $lastDate"
+                statusText.text = "Проверка ($netName): $lastDate"
             }
+        } else {
+            statusText.text = getString(R.string.status_ready)
         }
     }
 
