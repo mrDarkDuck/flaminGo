@@ -41,8 +41,7 @@ class MainActivity : AppCompatActivity() {
     private val prefsName = "MtCheckerPrefs"
     
     private var checkJob: Job? = null
-    private var workingLinks = mutableListOf<String>()
-    private var currentHeader = ""
+    private val workingLinks = mutableListOf<String>()
 
     private val getContent = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { processFile(it) }
@@ -88,7 +87,9 @@ class MainActivity : AppCompatActivity() {
         checkJob?.cancel()
         statusText.text = "Процесс остановлен пользователем"
         resetButtons()
-        saveResult(resultText.text.toString())
+        if (resultText.text.isNotEmpty()) {
+            saveResult(resultText.text.toString())
+        }
     }
 
     private fun resetButtons() {
@@ -167,66 +168,51 @@ class MainActivity : AppCompatActivity() {
         statusText.text = "Проверяю ${proxies.size} серверов..."
         progressBar.max = proxies.size
         workingLinks.clear()
+        resultText.text = ""
 
         val networkType = getNetworkType()
         val dateStr = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
-        currentHeader = "<b>Источник:</b> $sourceName<br><b>Сеть:</b> $networkType<br><b>Дата опроса:</b> $dateStr<br><b>Найдено:</b> <span id='count'>0</span> из ${proxies.size}<br><br>"
+        val header = "<b>Источник:</b> $sourceName<br><b>Сеть:</b> $networkType<br><b>Дата опроса:</b> $dateStr<br><b>Найдено:</b> <span id='count'>0</span> из ${proxies.size}<br><br>"
 
-        // Если кнопка "Проверить" была нажата, запускаем новый Job, иначе используем текущий из processFile
-        val currentJob = checkJob ?: CoroutineScope(Dispatchers.IO).launch {}.also { checkJob = it }
+        // Перезапускаем Job для процесса проверки
+        checkJob = CoroutineScope(Dispatchers.IO).launch {
+            var checkedCount = 0
+            for ((server, port) in proxies) {
+                if (!isActive) break // Прерываем цикл, если нажали Стоп
 
-        // Перезаписываем Job для локального файла, если он не был создан
-        if (checkJob?.isActive != true) {
-             checkJob = CoroutineScope(Dispatchers.IO).launch {
-                 performChecks(proxies, text)
-             }
-        } else {
-             // Если мы внутри уже запущенного checkJob (из startChecking), просто продолжаем
-             CoroutineScope(Dispatchers.IO).launch {
-                 performChecks(proxies, text)
-             }
-        }
-    }
-
-    private suspend fun performChecks(proxies: List<Pair<String, Int>>, rawText: String) {
-        var checkedCount = 0
-        
-        for ((server, port) in proxies) {
-            if (!checkJob!!.isActive) break // Проверяем, не нажали ли "Стоп"
-
-            if (isServerAlive(server, port)) {
-                val originalLine = rawText.lines().find { it.contains("server=$server") && it.contains("port=$port") }
-                if (originalLine != null) {
-                    workingLinks.add(originalLine)
-                    updateLinksOnScreen(proxies.size) // Мгновенно выводим на экран
+                if (isServerAlive(server, port)) {
+                    val originalLine = text.lines().find { it.contains("server=$server") && it.contains("port=$port") }
+                    if (originalLine != null) {
+                        workingLinks.add(originalLine)
+                        
+                        // Мгновенно выводим найденную ссылку на экран
+                        val headerWithCount = header.replace("<span id='count'>0</span>", "<span style='color:#D81B60;'><b>${workingLinks.size}</b></span>")
+                        val linksHtml = workingLinks.joinToString("<br><br>") { link -> "<a href=\"$link\">$link</a>" }
+                        
+                        withContext(Dispatchers.Main) {
+                            resultText.text = HtmlCompat.fromHtml(headerWithCount + linksHtml, HtmlCompat.FROM_HTML_MODE_LEGACY)
+                        }
+                    }
+                }
+                checkedCount++
+                
+                if (checkedCount % 5 == 0 || checkedCount == proxies.size) {
+                    val progress = checkedCount
+                    val total = proxies.size
+                    withContext(Dispatchers.Main) {
+                        progressBar.progress = progress
+                        statusText.text = "Проверено $progress из $total..."
+                    }
                 }
             }
-            checkedCount++
-            
-            if (checkedCount % 5 == 0 || checkedCount == proxies.size) {
-                val progress = checkedCount
-                val total = proxies.size
-                withContext(Dispatchers.Main) {
-                    progressBar.progress = progress
-                    statusText.text = "Проверено $progress из $total..."
+
+            withContext(Dispatchers.Main) {
+                if (isActive) {
+                    statusText.text = "Готово! Найдено: ${workingLinks.size}"
+                    resetButtons()
+                    saveResult(resultText.text.toString())
                 }
             }
-        }
-
-        withContext(Dispatchers.Main) {
-            if (checkJob?.isActive == true) {
-                statusText.text = "Готово! Найдено: ${workingLinks.size}"
-                resetButtons()
-                saveResult(resultText.text.toString())
-            }
-        }
-    }
-
-    private suspend fun updateLinksOnScreen(total: Int) {
-        withContext(Dispatchers.Main) {
-            val headerWithCount = currentHeader.replace("<span id='count'>0</span>", "<span style='color:#D81B60;'><b>${workingLinks.size}</b></span>")
-            val linksHtml = workingLinks.joinToString("<br><br>") { link -> "<a href=\"$link\">$link</a>" }
-            resultText.text = HtmlCompat.fromHtml(headerWithCount + linksHtml, HtmlCompat.FROM_HTML_MODE_LEGACY)
         }
     }
 
