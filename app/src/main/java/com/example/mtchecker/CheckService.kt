@@ -7,10 +7,13 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.coroutineContext
 
 class CheckService : Service() {
@@ -53,15 +56,14 @@ class CheckService : Service() {
             try {
                 val text = if (isCustom || isReCheck) customText!! else {
                     val conn = URL(url).openConnection() as HttpURLConnection
-                    conn.connectTimeout = 10000 // 10 секунд на подключение
-                    conn.readTimeout = 10000    // 10 секунд на чтение
+                    conn.connectTimeout = 10000
+                    conn.readTimeout = 10000
                     conn.requestMethod = "GET"
                     conn.connect()
                     conn.inputStream.bufferedReader().use { it.readText() }
                 }
                 performChecks(text, limit, onlyFast)
             } catch (e: Exception) {
-                // Если произошла ошибка сети (например, блокировка провайдера)
                 broadcastError(e.message ?: "Ошибка загрузки списка (возможно, заблокирован провайдером)")
                 stopSelf()
             }
@@ -85,33 +87,56 @@ class CheckService : Service() {
         }
 
         currentTotal = proxies.size
-        broadcastProgress(0, currentTotal) // Отправляем 0/XX, чтобы интерфейс понял размер списка
+        broadcastProgress(0, currentTotal)
 
-        for ((server, port) in proxies) {
-            if (!coroutineContext.isActive) break
-            
-            if (limit > 0 && foundProxies.size >= limit) {
-                break
-            }
+        // Ограничиваем количество одновременных проверок (15 потоков)
+        val semaphore = Semaphore(15)
+        
+        // Потокобезопасные счетчики
+        val checkedCount = AtomicInteger(0)
+        val foundCount = AtomicInteger(0)
 
-            val startTime = System.currentTimeMillis()
-            if (isServerAlive(server, port)) {
-                val ping = System.currentTimeMillis() - startTime
-                
-                if (!(onlyFast && ping >= 150)) {
-                    val originalLine = text.lines().find { it.contains("server=$server") && it.contains("port=$port") }
-                    if (originalLine != null) {
-                        val item = ProxyItem(originalLine, "$server:$port", ping)
-                        foundProxies.add(item)
-                        broadcastResult(item)
+        coroutineScope {
+            for ((server, port) in proxies) {
+                // Если достигли лимита или нажали Стоп - выходим из цикла
+                if (limit > 0 && foundCount.get() >= limit) break
+                if (!coroutineContext.isActive) break
+
+                launch {
+                    semaphore.withPermit {
+                        // Проверяем еще раз, не нажали ли Стоп, пока стояли в очереди
+                        if (!coroutineContext.isActive) return@withPermit
+
+                        val startTime = System.currentTimeMillis()
+                        if (isServerAlive(server, port)) {
+                            val ping = System.currentTimeMillis() - startTime
+                            
+                            // Фильтр "только быстрые"
+                            if (!(onlyFast && ping >= 150)) {
+                                val originalLine = text.lines().find { it.contains("server=$server") && it.contains("port=$port") }
+                                if (originalLine != null) {
+                                    val item = ProxyItem(originalLine, "$server:$port", ping)
+                                    
+                                    // Синхронизируем добавление в общий список
+                                    synchronized(foundProxies) {
+                                        foundProxies.add(item)
+                                    }
+                                    foundCount.incrementAndGet()
+                                    broadcastResult(item)
+                                }
+                            }
+                        }
+                        
+                        val current = checkedCount.incrementAndGet()
+                        currentChecked = current // Обновляем статическую переменную для MainActivity
+                        
+                        // Обновляем прогресс-бар каждые 5 проверок
+                        if (current % 5 == 0 || current == proxies.size) {
+                            broadcastProgress(current, proxies.size)
+                            updateNotification("Проверено $current из ${proxies.size}...")
+                        }
                     }
                 }
-            }
-            currentChecked++
-            
-            if (currentChecked % 5 == 0 || currentChecked == proxies.size) {
-                broadcastProgress(currentChecked, proxies.size)
-                updateNotification("Проверено $currentChecked из ${proxies.size}...")
             }
         }
 
