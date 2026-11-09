@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.MtChecker" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="colorPrimary">#FF4081</item>
-        <item name="colorPrimaryVariant">#C2185B</item>
+        <!-- Был #FF4081 (яркий), стал #D81B60 (благородный) -->
+        <item name="colorPrimary">#D81B60</item> 
+        <item name="colorPrimaryVariant">#880E4F</item>
         <item name="colorOnPrimary">#FFFFFF</item>
     </style>
 </resources>
