@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">FlaminGo</string>
+    <string name="source_github">GitHub List</string>
+    <string name="source_custom">Custom List (txt)</string>
+    <string name="btn_start">Start</string>
+    <string name="btn_stop">Stop</string>
+    <string name="btn_exit">Exit</string>
+    <string name="btn_copy_all">Copy All</string>
+    <string name="btn_copy">Copy</string>
+    <string name="status_ready">Ready</string>
+    <string name="status_checking">Checking: %1$d / %2$d</string>
+    <string name="status_done">Done! Found: %1$d</string>
+    <string name="version_label">Version: %1$s</string>
+    <string name="network_wifi">Wi-Fi</string>
+    <string name="network_cell">Mobile</string>
+</resources>
