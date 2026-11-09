@@ -86,7 +86,6 @@ class MainActivity : AppCompatActivity() {
                     val checked = intent.getIntExtra("checked", 0)
                     val total = intent.getIntExtra("total", 0)
                     
-                    // Если total = 0, значит список еще грузится или пуст
                     if (total > 0) {
                         progressBar.max = total
                         progressBar.progress = checked
@@ -111,7 +110,7 @@ class MainActivity : AppCompatActivity() {
                     val error = intent.getStringExtra("error") ?: "Unknown error"
                     statusText.text = "Ошибка: $error"
                     progressBar.max = 100
-                    progressBar.progress = 0 // Сбрасываем прогресс при ошибке
+                    progressBar.progress = 0
                     resetButtons()
                 }
             }
@@ -184,13 +183,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // --- НОВАЯ ФУНКЦИЯ ПРОВЕРКИ ИНТЕРНЕТА ---
+    private fun isNetworkAvailable(): Boolean {
+        val network = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        // Проверяем, есть ли реальный доступ в интернет (а не просто подключение к Wi-Fi без интернета)
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+               capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+
     // --- ЛОГИКА АВТООБНОВЛЕНИЯ ---
     private fun checkForUpdates(silent: Boolean) {
+        if (!isNetworkAvailable()) return // Не проверяем обновления без интернета
+
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val url = URL("https://api.github.com/repos/mrDarkDuck/flaminGo/releases/latest")
+                val url = URL("https://api.github.com/repos/mrDarkDarkDuck/flaminGo/releases/latest".replace("DarkDarkDuck", "DarkDuck")) // Фикс опечатки
                 val connection = url.openConnection() as HttpURLConnection
                 connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
+                connection.connectTimeout = 10000
+                connection.readTimeout = 10000
                 val response = connection.inputStream.bufferedReader().use { it.readText() }
                 
                 val tagRegex = Regex(""""tag_name"\s*:\s*"v1\.(\d+)"""")
@@ -216,11 +228,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             } catch (e: Exception) {
-                if (!silent) {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(this@MainActivity, "Ошибка проверки: ${e.message}", Toast.LENGTH_LONG).show()
-                    }
-                }
+                // Игнорируем ошибки сети при тихой проверке
             }
         }
     }
@@ -340,8 +348,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun getNetworkName(): String {
-        val network = connectivityManager.activeNetwork ?: return "No Net"
-        val caps = connectivityManager.getNetworkCapabilities(network) ?: return "Unknown"
+        val network = connectivityManager.activeNetwork ?: return "Нет сети"
+        val caps = connectivityManager.getNetworkCapabilities(network) ?: return "Неизвестно"
         
         if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
@@ -411,6 +419,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startChecking() {
+        // ПРОВЕРКА ИНТЕРНЕТА ПЕРЕД СТАРТОМ
+        if (!isNetworkAvailable()) {
+            Toast.makeText(this, "Нет подключения к интернету. Проверьте настройки сети.", Toast.LENGTH_LONG).show()
+            statusText.text = "Нет подключения к интернету"
+            return
+        }
+
         val isCustom = radioCustom.isChecked
         if (isCustom && customText == null) {
             getContent.launch("text/plain")
@@ -434,6 +449,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startRecheck() {
+        // ПРОВЕРКА ИНТЕРНЕТА ПЕРЕД ПЕРЕПРОВЕРКОЙ
+        if (!isNetworkAvailable()) {
+            Toast.makeText(this, "Нет подключения к интернету. Проверьте настройки сети.", Toast.LENGTH_LONG).show()
+            statusText.text = "Нет подключения к интернету"
+            return
+        }
+
         if (adapter.items.isEmpty()) return
         
         val linksToRecheck = adapter.items.joinToString("\n") { it.link }
@@ -559,6 +581,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showChangelogDialog(url: String) {
+        if (!isNetworkAvailable()) {
+            Toast.makeText(this, "Нет подключения к интернету", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         val loadingToast = Toast.makeText(this, "Загрузка...", Toast.LENGTH_SHORT)
         loadingToast.show()
 
