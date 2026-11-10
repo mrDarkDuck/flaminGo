@@ -627,7 +627,7 @@ class MainActivity : AppCompatActivity() {
             lifecycleScope.launch(Dispatchers.IO) {
                 try {
                     val fileName = if (isRussian) "HELP_RU.md" else "HELP.md"
-                    val timestamp = System.currentTimeMillis()
+                    // ДОБАВЛЕН ?t= ДЛЯ СБРОСА КЭША
                     val url = URL("https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/$fileName?t=${System.currentTimeMillis()}")
                     
                     val connection = url.openConnection() as HttpURLConnection
@@ -664,7 +664,8 @@ class MainActivity : AppCompatActivity() {
                 val isRussian = Locale.getDefault().language == "ru"
                 val fileName = if (isRussian) "CHANGELOG_RU.md" else "CHANGELOG.md"
                 
-                val url = URL("https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/$fileName")
+                // ДОБАВЛЕН ?t= ДЛЯ СБРОСА КЭША
+                val url = URL("https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/$fileName?t=${System.currentTimeMillis()}")
                 val connection = url.openConnection() as HttpURLConnection
                 connection.setRequestProperty("User-Agent", "FlaminGo-App")
                 val fullText = connection.inputStream.bufferedReader().use { it.readText() }
@@ -684,7 +685,7 @@ class MainActivity : AppCompatActivity() {
                     var body = section.lines().drop(1).joinToString("\n").trim()
                     
                     body = body.replace(Regex("\\*\\*(.*?)\\*\\*"), "<b>$1</b>")
-                    body = body.replace(Regex("(?m)^\\* "), "🦩 ")
+                    body = body.replace(Regex("(?m)^\\* "), "🦩 ") // ВОЗВРАЩАЕМ ФЛАМИНГО
                     body = body.replace("\n", "<br>")
                     
                     "<h3 style='color:#D81B60;'>$title</h3><br>$body"
