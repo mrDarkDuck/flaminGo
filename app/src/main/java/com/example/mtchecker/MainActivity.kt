@@ -311,6 +311,7 @@ class MainActivity : AppCompatActivity() {
         val permissions = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.READ_PHONE_STATE)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES) // <--- ДОБАВЛЕНО ДЛЯ ANDROID 13+
         }
         val allGranted = permissions.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
         
@@ -384,7 +385,14 @@ class MainActivity : AppCompatActivity() {
         val caps = connectivityManager.getNetworkCapabilities(network) ?: return "Неизвестно"
         
         if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            // Проверяем разрешения в зависимости от версии Android
+            val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(this, Manifest.permission.NEARBY_WIFI_DEVICES) == PackageManager.PERMISSION_GRANTED
+            } else {
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            }
+
+            if (hasPermission) {
                 try {
                     val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
                     @Suppress("DEPRECATION")
@@ -656,7 +664,6 @@ class MainActivity : AppCompatActivity() {
                 connection.setRequestProperty("User-Agent", "FlaminGo-App")
                 val fullText = connection.inputStream.bufferedReader().use { it.readText() }
                 
-                // Берем только блоки, которые начинаются с "## " (отсекаем H1 заголовок)
                 val rawSections = fullText.split(Regex("(?=## )"))
                     .filter { it.isNotBlank() && it.trim().startsWith("## ") }
                 
@@ -682,17 +689,14 @@ class MainActivity : AppCompatActivity() {
                     val htmlText = Html.fromHtml(slides[currentIndex], Html.FROM_HTML_MODE_LEGACY)
                     builder.setMessage(htmlText)
                     
-                    // Изначально кнопки "Далее" и "Закрыть"
                     builder.setPositiveButton(getString(R.string.btn_next)) { _, _ -> }
                     builder.setNegativeButton(getString(R.string.btn_close), null)
 
-                    val dialog = builder.show() // Сразу показываем диалог
+                    val dialog = builder.show()
 
-                    // Настраиваем кнопки после показа
                     val posBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
                     val negBtn = dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
 
-                    // Если это первый слайд и он единственный - сразу меняем на "Закрыть" и прячем левую кнопку
                     if (slides.size == 1) {
                         posBtn.text = getString(R.string.btn_close)
                         negBtn.visibility = android.view.View.GONE
@@ -703,10 +707,9 @@ class MainActivity : AppCompatActivity() {
                         if (currentIndex < slides.size) {
                             dialog.setMessage(Html.fromHtml(slides[currentIndex], Html.FROM_HTML_MODE_LEGACY))
                             
-                            // Если дошли до последнего слайда
                             if (currentIndex == slides.size - 1) {
-                                posBtn.text = getString(R.string.btn_close) // Меняем "Далее" на "Закрыть"
-                                negBtn.visibility = android.view.View.GONE // Прячем кнопку "Закрыть" слева, чтобы не дублировалась
+                                posBtn.text = getString(R.string.btn_close)
+                                negBtn.visibility = android.view.View.GONE
                             }
                         } else {
                             dialog.dismiss()
@@ -725,23 +728,26 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val savedString = items.joinToString("|") { "${it.link};;${it.displayName};;${it.ping}" }
         val dateStr = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
+        val currentNetName = getNetworkName() // Запоминаем имя сети в момент сохранения
         
         prefs.edit()
             .putString("last_result_$netId", savedString)
             .putString("last_check_date_$netId", dateStr)
+            .putString("last_check_net_name_$netId", currentNetName) // СОХРАНЯЕМ ИМЯ СЕТИ
             .apply()
             
-        // Обновляем дату под кнопками
-        lastCheckText.text = "Проверка (${getNetworkName()}): $dateStr"
+        lastCheckText.text = "Проверка ($currentNetName): $dateStr"
     }
 
     private fun loadSavedResult() {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val netId = getNetworkIdentifier()
-        val netName = getNetworkName()
+        val currentNetName = getNetworkName()
         
         val saved = prefs.getString("last_result_$netId", "") ?: ""
         val lastDate = prefs.getString("last_check_date_$netId", "") ?: ""
+        // ЧИТАЕМ СОХРАНЕННОЕ ИМЯ СЕТИ. Если его нет (старые данные) - берем текущее
+        val savedNetName = prefs.getString("last_check_net_name_$netId", currentNetName) ?: currentNetName
         
         adapter.clear()
         
@@ -757,8 +763,7 @@ class MainActivity : AppCompatActivity() {
             adapter.notifyDataSetChanged()
             
             if (lastDate.isNotEmpty()) {
-                // ПИШЕМ ДАТУ В НОВОЕ ПОЛЕ ПОД КНОПКАМИ
-                lastCheckText.text = "Проверка ($netName): $lastDate"
+                lastCheckText.text = "Проверка ($savedNetName): $lastDate"
             } else {
                 lastCheckText.text = ""
             }
