@@ -4,3 +4,8 @@
 * **Help Section:** Added a separate section describing application features.
 * **Search Improvement:** "Fast proxies only" is now enabled by default.
 * **Active Sieve:** Two-stage checking for maximum speed.
+
+## Version 1.9
+* **Settings:** Gear icon moved to the left corner.
+* **Output Improvement:** Added a button to send proxies directly to Telegram (✈️).
+* **Auto-update:** Fixed installation conflicts for new versions.
