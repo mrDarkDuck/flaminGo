@@ -24,4 +24,6 @@ The app requests the following permissions:
 *(You can deny location and phone permissions. The app will still work, but it will save lists under generic names like "Wi-Fi" or "Mobile").*
 
 ---
-* **Source code:** [github.com/mrDarkDuck/flaminGo](https://github.com/mrDarkDuck/flaminGo)
+---
+* **Source code and releases:** [github.com/mrDarkDuck/flaminGo](https://github.com/mrDarkDuck/flaminGo)
+* **Found a bug or have an idea?** Please open an **Issue** in the GitHub repository. This is the best way to contact the developer.
