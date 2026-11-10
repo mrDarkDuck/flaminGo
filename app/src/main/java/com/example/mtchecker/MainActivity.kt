@@ -34,9 +34,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class 
-
 class MainActivity : AppCompatActivity() {
+
     private lateinit var statusText: TextView
     private lateinit var networkText: TextView
     private lateinit var lastCheckText: TextView
@@ -220,7 +219,6 @@ class MainActivity : AppCompatActivity() {
     private fun checkForUpdates(silent: Boolean) {
         if (!isNetworkAvailable()) return
 
-        // ИСПОЛЬЗУЕМ lifecycleScope
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val url = URL("https://api.github.com/repos/mrDarkDuck/flaminGo/releases/latest")
@@ -238,7 +236,7 @@ class MainActivity : AppCompatActivity() {
                 latestApkUrl = apkRegex.find(response)?.groupValues?.get(1)
 
                 withContext(Dispatchers.Main) {
-                    if (isFinishing || isDestroyed) return@withContext // ЗАЩИТА
+                    if (isFinishing || isDestroyed) return@withContext
                     
                     if (latestVersion > BuildConfig.VERSION_CODE) {
                         updateButton.visibility = android.view.View.VISIBLE
@@ -320,7 +318,7 @@ class MainActivity : AppCompatActivity() {
         val permissions = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.READ_PHONE_STATE)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES) // <--- ДОБАВЛЕНО ДЛЯ ANDROID 13
+            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
         }
         val allGranted = permissions.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
         
@@ -394,10 +392,6 @@ class MainActivity : AppCompatActivity() {
         val caps = connectivityManager.getNetworkCapabilities(network) ?: return "Неизвестно"
         
         if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-
-
-            // Проверяем разрешения в зависимости от версии Android
-
             val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 ContextCompat.checkSelfPermission(this, Manifest.permission.NEARBY_WIFI_DEVICES) == PackageManager.PERMISSION_GRANTED
             } else {
@@ -747,13 +741,12 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val savedString = items.joinToString("|") { "${it.link};;${it.displayName};;${it.ping}" }
         val dateStr = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
-        val currentNetName = getNetworkName() // Запоминаем имя сети в момент сохранения
-
+        val currentNetName = getNetworkName()
         
         prefs.edit()
             .putString("last_result_$netId", savedString)
             .putString("last_check_date_$netId", dateStr)
-            .putString("last_check_net_name_$netId", currentNetName) // СОХРАНЯЕМ ИМЯ СЕТИ
+            .putString("last_check_net_name_$netId", currentNetName)
             .apply()
             
         lastCheckText.text = "Проверка ($currentNetName): $dateStr"
@@ -766,8 +759,6 @@ class MainActivity : AppCompatActivity() {
         
         val saved = prefs.getString("last_result_$netId", "") ?: ""
         val lastDate = prefs.getString("last_check_date_$netId", "") ?: ""
-
-        // ЧИТАЕМ СОХРАНЕННОЕ ИМЯ СЕТИ. Если его нет (старые данные) - берем текущее
         val savedNetName = prefs.getString("last_check_net_name_$netId", currentNetName) ?: currentNetName
         
         adapter.clear()
