@@ -34,7 +34,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class MainActivity : AppCompatActivity() {
+class 
+
+Activity : AppCompatActivity() {
 
     private lateinit var statusText: TextView
     private lateinit var networkText: TextView
@@ -319,7 +321,7 @@ class MainActivity : AppCompatActivity() {
         val permissions = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.READ_PHONE_STATE)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES) // <--- ДОБАВЛЕНО ДЛЯ ANDROID 13
         }
         val allGranted = permissions.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
         
@@ -393,6 +395,10 @@ class MainActivity : AppCompatActivity() {
         val caps = connectivityManager.getNetworkCapabilities(network) ?: return "Неизвестно"
         
         if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+
+
+            // Проверяем разрешения в зависимости от версии Android
+
             val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 ContextCompat.checkSelfPermission(this, Manifest.permission.NEARBY_WIFI_DEVICES) == PackageManager.PERMISSION_GRANTED
             } else {
@@ -742,12 +748,13 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val savedString = items.joinToString("|") { "${it.link};;${it.displayName};;${it.ping}" }
         val dateStr = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
-        val currentNetName = getNetworkName()
+        val currentNetName = getNetworkName() // Запоминаем имя сети в момент сохранения
+
         
         prefs.edit()
             .putString("last_result_$netId", savedString)
             .putString("last_check_date_$netId", dateStr)
-            .putString("last_check_net_name_$netId", currentNetName) 
+            .putString("last_check_net_name_$netId", currentNetName) // СОХРАНЯЕМ ИМЯ СЕТИ
             .apply()
             
         lastCheckText.text = "Проверка ($currentNetName): $dateStr"
@@ -760,6 +767,8 @@ class MainActivity : AppCompatActivity() {
         
         val saved = prefs.getString("last_result_$netId", "") ?: ""
         val lastDate = prefs.getString("last_check_date_$netId", "") ?: ""
+
+        // ЧИТАЕМ СОХРАНЕННОЕ ИМЯ СЕТИ. Если его нет (старые данные) - берем текущее
         val savedNetName = prefs.getString("last_check_net_name_$netId", currentNetName) ?: currentNetName
         
         adapter.clear()
