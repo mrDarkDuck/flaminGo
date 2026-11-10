@@ -14,6 +14,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.SystemClock
 import android.telephony.TelephonyManager
+import android.text.Html
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -36,11 +37,13 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var statusText: TextView
     private lateinit var networkText: TextView
+    private lateinit var lastCheckText: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
     private lateinit var recheckButton: Button
     private lateinit var updateButton: Button
+    private lateinit var whatsNewButton: Button
     private lateinit var chronometer: Chronometer
     private lateinit var radioGithub: RadioButton
     private lateinit var radioCustom: RadioButton
@@ -85,7 +88,6 @@ class MainActivity : AppCompatActivity() {
                 "CHECK_PROGRESS" -> {
                     val checked = intent.getIntExtra("checked", 0)
                     val total = intent.getIntExtra("total", 0)
-                    
                     if (total > 0) {
                         progressBar.max = total
                         progressBar.progress = checked
@@ -124,11 +126,13 @@ class MainActivity : AppCompatActivity() {
         try {
             statusText = findViewById(R.id.statusText)
             networkText = findViewById(R.id.networkText)
+            lastCheckText = findViewById(R.id.lastCheckText)
             progressBar = findViewById(R.id.progressBar)
             startButton = findViewById(R.id.startButton)
             stopButton = findViewById(R.id.stopButton)
             recheckButton = findViewById(R.id.recheckButton)
             updateButton = findViewById(R.id.updateButton)
+            whatsNewButton = findViewById(R.id.whatsNewButton)
             chronometer = findViewById(R.id.chronometer)
             radioGithub = findViewById(R.id.radioGithub)
             radioCustom = findViewById(R.id.radioCustom)
@@ -161,7 +165,6 @@ class MainActivity : AppCompatActivity() {
 
             findViewById<Button>(R.id.settingsButton).setOnClickListener { showSettingsDialog() }
 
-            // Обработчик кнопки обновления с защитой от двойного нажатия
             updateButton.setOnClickListener {
                 if (latestApkUrl != null) {
                     updateButton.isEnabled = false
@@ -173,21 +176,35 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
+            whatsNewButton.setOnClickListener {
+                val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+                prefs.edit().putInt("last_seen_version", BuildConfig.VERSION_CODE).apply()
+                whatsNewButton.visibility = android.view.View.GONE
+                showChangelogDialog(isFromSettings = false)
+            }
+
             findViewById<Button>(R.id.exitButton).setOnClickListener {
                 stopService(Intent(this, CheckService::class.java))
                 saveResult(adapter.items, CheckService.currentNetworkId.ifEmpty { getNetworkIdentifier() })
                 finishAffinity()
             }
 
-            findViewById<Button>(R.id.whatsNewButton).setOnClickListener {
-                val changelogUrl = "https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/CHANGELOG.md"
-                showChangelogDialog(changelogUrl)
-            }
-
             checkForUpdates(silent = true)
+            checkWhatsNewVisibility()
             
         } catch (e: Exception) {
             Toast.makeText(this, "Ошибка инициализации UI: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun checkWhatsNewVisibility() {
+        val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        val lastSeen = prefs.getInt("last_seen_version", 0)
+        
+        if (BuildConfig.VERSION_CODE > lastSeen) {
+            whatsNewButton.visibility = android.view.View.VISIBLE
+        } else {
+            whatsNewButton.visibility = android.view.View.GONE
         }
     }
 
@@ -203,10 +220,11 @@ class MainActivity : AppCompatActivity() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Всегда запрашиваем самый последний релиз
                 val url = URL("https://api.github.com/repos/mrDarkDuck/flaminGo/releases/latest")
                 val connection = url.openConnection() as HttpURLConnection
                 connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
+                // ДОБАВЛЯЕМ USER-AGENT, чтобы GitHub API не блокировал запрос
+                connection.setRequestProperty("User-Agent", "FlaminGo-App")
                 connection.connectTimeout = 10000
                 connection.readTimeout = 10000
                 val response = connection.inputStream.bufferedReader().use { it.readText() }
@@ -238,16 +256,12 @@ class MainActivity : AppCompatActivity() {
                         if (!silent) Toast.makeText(this@MainActivity, "У вас последняя версия!", Toast.LENGTH_SHORT).show()
                     }
                 }
-            } catch (e: Exception) {
-                // Игнорируем
-            }
+            } catch (e: Exception) {}
         }
     }
 
     private fun downloadAndInstallApk(apkUrl: String) {
         Toast.makeText(this, "Начинаю скачивание...", Toast.LENGTH_SHORT).show()
-        
-        // Уникальное имя файла для каждого обновления
         val fileName = "update_${System.currentTimeMillis()}.apk"
 
         val request = DownloadManager.Request(Uri.parse(apkUrl))
@@ -273,7 +287,6 @@ class MainActivity : AppCompatActivity() {
                         isDownloading = false
                         withContext(Dispatchers.Main) {
                             Toast.makeText(this@MainActivity, "Ошибка скачивания. Попробуйте позже.", Toast.LENGTH_SHORT).show()
-                            // Возвращаем кнопку
                             updateButton.isEnabled = true
                             updateButton.text = "⬇️"
                             updateButton.alpha = 1.0f
@@ -454,7 +467,7 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val targetUrl = prefs.getString("list_url", defaultUrl) ?: defaultUrl
         val limit = prefs.getInt("check_limit", 0)
-        val onlyFast = prefs.getBoolean("only_fast", true) // По умолчанию true
+        val onlyFast = prefs.getBoolean("only_fast", true)
 
         prepareUiForCheck()
 
@@ -479,7 +492,7 @@ class MainActivity : AppCompatActivity() {
         val linksToRecheck = adapter.items.joinToString("\n") { it.link }
         
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-        val onlyFast = prefs.getBoolean("only_fast", true) // По умолчанию true
+        val onlyFast = prefs.getBoolean("only_fast", true)
 
         prepareUiForCheck()
 
@@ -501,6 +514,7 @@ class MainActivity : AppCompatActivity() {
         progressBar.progress = 0
         adapter.clear()
         statusText.text = "Запуск сервиса..."
+        lastCheckText.text = "" // Очищаем старую дату при старте
         
         chronometer.base = SystemClock.elapsedRealtime()
         chronometer.start()
@@ -522,6 +536,8 @@ class MainActivity : AppCompatActivity() {
         val urlInput = dialogView.findViewById<EditText>(R.id.settingsUrl)
         val depthGroup = dialogView.findViewById<RadioGroup>(R.id.depthGroup)
         val onlyFastCheck = dialogView.findViewById<CheckBox>(R.id.onlyFastCheck)
+        val historyBtn = dialogView.findViewById<TextView>(R.id.historyBtn)
+        val helpBtn = dialogView.findViewById<TextView>(R.id.helpBtn)
 
         urlInput.setText(prefs.getString("list_url", defaultUrl) ?: defaultUrl)
         
@@ -531,9 +547,9 @@ class MainActivity : AppCompatActivity() {
             5 -> depthGroup.check(R.id.depth5)
             else -> depthGroup.check(R.id.depthAll)
         }
-        onlyFastCheck.isChecked = prefs.getBoolean("only_fast", true) // По умолчанию true
+        onlyFastCheck.isChecked = prefs.getBoolean("only_fast", true)
 
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle(R.string.settings_title)
             .setView(dialogView)
             .setPositiveButton(R.string.settings_save) { _, _ ->
@@ -554,9 +570,141 @@ class MainActivity : AppCompatActivity() {
                     .apply()
             }
             .setNegativeButton(R.string.settings_cancel, null)
-            .show()
+            .create()
+
+        historyBtn.setOnClickListener {
+            dialog.dismiss()
+            showChangelogDialog(isFromSettings = true)
+        }
+
+        helpBtn.setOnClickListener {
+            dialog.dismiss()
+            showHelpDialog()
+        }
+
+        dialog.show()
     }
 
+    private fun showHelpDialog() {
+        val isRussian = Locale.getDefault().language == "ru"
+        val prefKey = if (isRussian) "cached_help_ru" else "cached_help_en"
+        val assetFileName = if (isRussian) "help_ru.md" else "help_en.md"
+        
+        val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        
+        var helpText = prefs.getString(prefKey, null)
+        if (helpText == null) {
+            try {
+                val inputStream = assets.open(assetFileName)
+                helpText = inputStream.bufferedReader().use { it.readText() }
+            } catch (e: Exception) {
+                helpText = "Текст справки недоступен."
+            }
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(getString(R.string.help_title))
+            .setMessage(Html.fromHtml(helpText.replace("\n", "<br>").replace("* ", "• "), Html.FROM_HTML_MODE_LEGACY))
+            .setPositiveButton(getString(R.string.btn_close), null)
+            .create()
+            
+        dialog.show()
+
+        if (isNetworkAvailable()) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val fileName = if (isRussian) "HELP_RU.md" else "HELP.md"
+                    val url = URL("https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/$fileName")
+                    
+                    val connection = url.openConnection() as HttpURLConnection
+                    connection.setRequestProperty("User-Agent", "FlaminGo-App")
+                    connection.connectTimeout = 5000
+                    connection.readTimeout = 5000
+                    val newText = connection.inputStream.bufferedReader().use { it.readText() }
+
+                    if (newText != helpText) {
+                        prefs.edit().putString(prefKey, newText).apply()
+                        
+                        withContext(Dispatchers.Main) {
+                            if (dialog.isShowing) {
+                                dialog.setMessage(Html.fromHtml(newText.replace("\n", "<br>").replace("* ", "• "), Html.FROM_HTML_MODE_LEGACY))
+                            }
+                        }
+                    }
+                } catch (e: Exception) {}
+            }
+        }
+    }
+
+    private fun showChangelogDialog(isFromSettings: Boolean) {
+        if (!isNetworkAvailable()) {
+            Toast.makeText(this, "Нет подключения к интернету", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val loadingToast = Toast.makeText(this, getString(R.string.loading_history), Toast.LENGTH_SHORT)
+        loadingToast.show()
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val isRussian = Locale.getDefault().language == "ru"
+                val fileName = if (isRussian) "CHANGELOG_RU.md" else "CHANGELOG.md"
+                
+                val url = URL("https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/$fileName")
+                val connection = url.openConnection() as HttpURLConnection
+                connection.setRequestProperty("User-Agent", "FlaminGo-App")
+                val fullText = connection.inputStream.bufferedReader().use { it.readText() }
+                
+                val rawSections = fullText.split(Regex("(?=## )")).filter { it.isNotBlank() }
+                
+                if (rawSections.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@MainActivity, "История пуста", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+
+                val slides = rawSections.map { section ->
+                    val title = section.lines().first().replace("## ", "")
+                    val body = section.lines().drop(1).joinToString("\n").trim()
+                    "<h3 style='color:#D81B60;'>$title</h3><br>${body.replace("\n", "<br>• ")}"
+                }
+
+                var currentIndex = 0
+
+                withContext(Dispatchers.Main) {
+                    val builder = AlertDialog.Builder(this@MainActivity)
+                    builder.setTitle(getString(R.string.history_title))
+                    
+                    val htmlText = Html.fromHtml(slides[currentIndex], Html.FROM_HTML_MODE_LEGACY)
+                    builder.setMessage(htmlText)
+                    
+                    builder.setPositiveButton(getString(R.string.btn_next)) { _, _ -> }
+                    builder.setNegativeButton(getString(R.string.btn_close), null)
+
+                    val dialog = builder.create()
+                    dialog.show()
+
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                        currentIndex++
+                        if (currentIndex < slides.size) {
+                            dialog.setMessage(Html.fromHtml(slides[currentIndex], Html.FROM_HTML_MODE_LEGACY))
+                            if (currentIndex == slides.size - 1) {
+                                dialog.getButton(AlertDialog.BUTTON_POSITIVE).text = getString(R.string.btn_done)
+                            }
+                        } else {
+                            dialog.dismiss()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, getString(R.string.error_history_load), Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+    
     private fun saveResult(items: List<ProxyItem>, netId: String) {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val savedString = items.joinToString("|") { "${it.link};;${it.displayName};;${it.ping}" }
@@ -566,6 +714,9 @@ class MainActivity : AppCompatActivity() {
             .putString("last_result_$netId", savedString)
             .putString("last_check_date_$netId", dateStr)
             .apply()
+            
+        // Обновляем дату под кнопками
+        lastCheckText.text = "Проверка (${getNetworkName()}): $dateStr"
     }
 
     private fun loadSavedResult() {
@@ -590,42 +741,15 @@ class MainActivity : AppCompatActivity() {
             adapter.notifyDataSetChanged()
             
             if (lastDate.isNotEmpty()) {
-                statusText.text = "Проверка ($netName): $lastDate"
+                // ПИШЕМ ДАТУ В НОВОЕ ПОЛЕ ПОД КНОПКАМИ
+                lastCheckText.text = "Проверка ($netName): $lastDate"
+            } else {
+                lastCheckText.text = ""
             }
         } else {
             statusText.text = getString(R.string.status_ready)
+            lastCheckText.text = ""
         }
         recheckButton.isEnabled = adapter.items.isNotEmpty()
-    }
-
-    private fun showChangelogDialog(url: String) {
-        if (!isNetworkAvailable()) {
-            Toast.makeText(this, "Нет подключения к интернету", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val loadingToast = Toast.makeText(this, "Загрузка...", Toast.LENGTH_SHORT)
-        loadingToast.show()
-
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val text = URL(url).readText()
-                withContext(Dispatchers.Main) {
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle("Что нового?")
-                        .setMessage(text)
-                        .setPositiveButton("ОК", null)
-                        .show()
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle("Что нового?")
-                        .setMessage("Не удалось загрузить список изменений.\nПроверьте интернет.")
-                        .setPositiveButton("ОК", null)
-                        .show()
-                }
-            }
-        }
     }
 }
