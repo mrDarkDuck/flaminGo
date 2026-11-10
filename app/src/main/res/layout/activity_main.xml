@@ -13,7 +13,6 @@
         android:gravity="center_vertical"
         android:layout_marginBottom="8dp">
 
-        <!-- Левая часть: Настройки -->
         <Button
             android:id="@+id/settingsButton"
             style="?android:attr/borderlessButtonStyle"
@@ -25,7 +24,6 @@
             android:paddingStart="4dp"
             android:paddingEnd="8dp"/>
 
-        <!-- Центральная часть: Что нового (занимает всё оставшееся место и сжимается при необходимости) -->
         <Button
             android:id="@+id/whatsNewButton"
             style="?android:attr/borderlessButtonStyle"
@@ -37,7 +35,6 @@
             android:textSize="12sp"
             android:gravity="center" />
 
-        <!-- Правая часть: Обновить (иконка) и Выход -->
         <Button
             android:id="@+id/updateButton"
             style="?android:attr/borderlessButtonStyle"
@@ -64,7 +61,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Проверка доступности MTProto прокси для Telegram. Выберите источник, нажмите Старт и скопируйте рабочие ссылки."
+        android:text="Проверка доступности MTProto прокси для Telegram."
         android:textSize="12sp"
         android:textColor="#AAAAAA"
         android:layout_marginBottom="12dp"/>
@@ -90,7 +87,7 @@
             android:text="@string/source_custom"/>
     </RadioGroup>
 
-    <!-- Информация о сети -->
+    <!-- Информация о сети (Wi-Fi/Mobile) -->
     <TextView
         android:id="@+id/networkText"
         android:layout_width="match_parent"
@@ -182,6 +179,16 @@
             android:enabled="false"
             android:layout_marginStart="4dp"/>
     </LinearLayout>
+
+    <!-- НОВОЕ ПОЛЕ: Дата и сеть последней проверки -->
+    <TextView
+        android:id="@+id/lastCheckText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        android:textColor="#888888"
+        android:gravity="center"
+        android:layout_marginBottom="8dp"/>
 
     <!-- Таблица с результатами -->
     <androidx.recyclerview.widget.RecyclerView
