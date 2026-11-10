@@ -13,6 +13,7 @@ import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.coroutineContext
 
@@ -54,7 +55,9 @@ class CheckService : Service() {
         checkJob?.cancel()
         checkJob = serviceScope.launch {
             try {
-                val text = if (isCustom || isReCheck) customText!! else {
+                val text = if (isCustom || isReCheck) {
+                    customText ?: ""
+                } else {
                     val conn = URL(url).openConnection() as HttpURLConnection
                     conn.connectTimeout = 10000
                     conn.readTimeout = 10000
@@ -62,9 +65,16 @@ class CheckService : Service() {
                     conn.connect()
                     conn.inputStream.bufferedReader().use { it.readText() }
                 }
+                
+                if (text.isEmpty()) {
+                    broadcastError("Список пуст или не удалось загрузить.")
+                    stopSelf()
+                    return@launch
+                }
+                
                 performChecks(text, limit, onlyFast)
             } catch (e: Exception) {
-                broadcastError(e.message ?: "Ошибка загрузки списка (возможно, заблокирован провайдером)")
+                broadcastError(e.message ?: "Ошибка загрузки списка")
                 stopSelf()
             }
         }
@@ -89,9 +99,10 @@ class CheckService : Service() {
         currentTotal = allProxies.size
         broadcastProgress(0, currentTotal)
 
-        val semaphore = Semaphore(15) // 15 "кассиров"
+        val semaphore = Semaphore(15)
         val foundCount = AtomicInteger(0)
-        val retryList = mutableListOf<Pair<String, Int>>()
+        // Используем потокобезопасную очередь
+        val retryList = ConcurrentLinkedQueue<Pair<String, Int>>()
         val checkedCount = AtomicInteger(0)
 
         // --- ПРОХОД 1: БЫСТРОЕ СИТО (1 секунда) ---
@@ -112,8 +123,7 @@ class CheckService : Service() {
                                 addResult(proxy, ping, text, foundCount)
                             }
                         } else {
-                            // Если не ответил за 1 сек - в карантин
-                            synchronized(retryList) { retryList.add(proxy) }
+                            retryList.add(proxy) // Без synchronized
                         }
                         
                         val current = checkedCount.incrementAndGet()
@@ -127,7 +137,6 @@ class CheckService : Service() {
         }
 
         // --- ПРОХОД 2: ГЛУБОКОЕ СИТО (3 секунды) ---
-        // Запускаем ТОЛЬКО если не достигнут лимит, не нажат Стоп и нам нужны медленные прокси
         if ((limit == 0 || foundCount.get() < limit) && coroutineContext.isActive && !onlyFast) {
             updateNotification("Глубокая проверка (${retryList.size} шт)...")
             coroutineScope {
@@ -150,14 +159,14 @@ class CheckService : Service() {
             }
         }
 
+        // ИСПРАВЛЕНО: isRunning сбрасывается всегда, даже если нажали "Стоп"
+        isRunning = false
         if (coroutineContext.isActive) {
-            isRunning = false
             broadcastFinished()
         }
         stopSelf()
     }
 
-    // Вспомогательная функция для добавления результата
     private fun addResult(proxy: Pair<String, Int>, ping: Long, text: String, foundCount: AtomicInteger) {
         val originalLine = text.lines().find { it.contains("server=${proxy.first}") && it.contains("port=${proxy.second}") }
         if (originalLine != null) {
@@ -168,14 +177,19 @@ class CheckService : Service() {
         }
     }
 
+    // ИСПРАВЛЕНО: Сокет теперь всегда закрывается, даже при ошибке
     private fun isServerAlive(host: String, port: Int, timeoutMs: Int): Boolean {
+        var socket: Socket? = null
         return try {
-            val socket = Socket()
+            socket = Socket()
             socket.connect(InetSocketAddress(host, port), timeoutMs)
-            socket.close()
             true
         } catch (e: Exception) {
             false
+        } finally {
+            try {
+                socket?.close()
+            } catch (e: Exception) {}
         }
     }
 

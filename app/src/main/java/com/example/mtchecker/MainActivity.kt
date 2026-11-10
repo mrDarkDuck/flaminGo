@@ -21,6 +21,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.*
@@ -33,7 +34,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class MainActivity : AppCompatActivity() {
+class 
+
+Activity : AppCompatActivity() {
 
     private lateinit var statusText: TextView
     private lateinit var networkText: TextView
@@ -218,7 +221,8 @@ class MainActivity : AppCompatActivity() {
     private fun checkForUpdates(silent: Boolean) {
         if (!isNetworkAvailable()) return
 
-        CoroutineScope(Dispatchers.IO).launch {
+        // ИСПОЛЬЗУЕМ lifecycleScope
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val url = URL("https://api.github.com/repos/mrDarkDuck/flaminGo/releases/latest")
                 val connection = url.openConnection() as HttpURLConnection
@@ -235,6 +239,8 @@ class MainActivity : AppCompatActivity() {
                 latestApkUrl = apkRegex.find(response)?.groupValues?.get(1)
 
                 withContext(Dispatchers.Main) {
+                    if (isFinishing || isDestroyed) return@withContext // ЗАЩИТА
+                    
                     if (latestVersion > BuildConfig.VERSION_CODE) {
                         updateButton.visibility = android.view.View.VISIBLE
                         if (!silent) {
@@ -272,7 +278,7 @@ class MainActivity : AppCompatActivity() {
         val downloadManager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val downloadId = downloadManager.enqueue(request)
 
-        CoroutineScope(Dispatchers.IO).launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             var isDownloading = true
             while (isDownloading) {
                 val cursor = downloadManager.query(DownloadManager.Query().setFilterById(downloadId))
@@ -281,14 +287,18 @@ class MainActivity : AppCompatActivity() {
                     if (status == DownloadManager.STATUS_SUCCESSFUL) {
                         isDownloading = false
                         val file = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
-                        withContext(Dispatchers.Main) { installApk(file) }
+                        withContext(Dispatchers.Main) { 
+                            if (!isFinishing && !isDestroyed) installApk(file) 
+                        }
                     } else if (status == DownloadManager.STATUS_FAILED) {
                         isDownloading = false
                         withContext(Dispatchers.Main) {
-                            Toast.makeText(this@MainActivity, "Ошибка скачивания. Попробуйте позже.", Toast.LENGTH_SHORT).show()
-                            updateButton.isEnabled = true
-                            updateButton.text = "⬇️"
-                            updateButton.alpha = 1.0f
+                            if (!isFinishing && !isDestroyed) {
+                                Toast.makeText(this@MainActivity, "Ошибка скачивания. Попробуйте позже.", Toast.LENGTH_SHORT).show()
+                                updateButton.isEnabled = true
+                                updateButton.text = "⬇️"
+                                updateButton.alpha = 1.0f
+                            }
                         }
                     }
                 }
@@ -311,7 +321,7 @@ class MainActivity : AppCompatActivity() {
         val permissions = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.READ_PHONE_STATE)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES) // <--- ДОБАВЛЕНО ДЛЯ ANDROID 13+
+            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES) // <--- ДОБАВЛЕНО ДЛЯ ANDROID 13
         }
         val allGranted = permissions.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
         
@@ -385,7 +395,10 @@ class MainActivity : AppCompatActivity() {
         val caps = connectivityManager.getNetworkCapabilities(network) ?: return "Неизвестно"
         
         if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+
+
             // Проверяем разрешения в зависимости от версии Android
+
             val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 ContextCompat.checkSelfPermission(this, Manifest.permission.NEARBY_WIFI_DEVICES) == PackageManager.PERMISSION_GRANTED
             } else {
@@ -521,7 +534,7 @@ class MainActivity : AppCompatActivity() {
         progressBar.progress = 0
         adapter.clear()
         statusText.text = "Запуск сервиса..."
-        lastCheckText.text = "" // Очищаем старую дату при старте
+        lastCheckText.text = "" 
         
         chronometer.base = SystemClock.elapsedRealtime()
         chronometer.start()
@@ -592,7 +605,6 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    // --- ФУНКЦИЯ ДЛЯ ОТОБРАЖЕНИЯ СПРАВКИ (OFFLINE-FIRST) ---
     private fun showHelpDialog() {
         val isRussian = Locale.getDefault().language == "ru"
         val prefKey = if (isRussian) "cached_help_ru" else "cached_help_en"
@@ -619,7 +631,7 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
 
         if (isNetworkAvailable()) {
-            CoroutineScope(Dispatchers.IO).launch {
+            lifecycleScope.launch(Dispatchers.IO) {
                 try {
                     val fileName = if (isRussian) "HELP_RU.md" else "HELP.md"
                     val url = URL("https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/$fileName")
@@ -634,7 +646,7 @@ class MainActivity : AppCompatActivity() {
                         prefs.edit().putString(prefKey, newText).apply()
                         
                         withContext(Dispatchers.Main) {
-                            if (dialog.isShowing) {
+                            if (!isFinishing && !isDestroyed && dialog.isShowing) {
                                 dialog.setMessage(Html.fromHtml(newText.replace("\n", "<br>").replace("* ", "• "), Html.FROM_HTML_MODE_LEGACY))
                             }
                         }
@@ -644,7 +656,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // --- СЛАЙДЕР ИСТОРИИ ИЗМЕНЕНИЙ ---
     private fun showChangelogDialog(isFromSettings: Boolean) {
         if (!isNetworkAvailable()) {
             Toast.makeText(this, "Нет подключения к интернету", Toast.LENGTH_SHORT).show()
@@ -654,7 +665,7 @@ class MainActivity : AppCompatActivity() {
         val loadingToast = Toast.makeText(this, getString(R.string.loading_history), Toast.LENGTH_SHORT)
         loadingToast.show()
 
-        CoroutineScope(Dispatchers.IO).launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val isRussian = Locale.getDefault().language == "ru"
                 val fileName = if (isRussian) "CHANGELOG_RU.md" else "CHANGELOG.md"
@@ -674,17 +685,12 @@ class MainActivity : AppCompatActivity() {
                     return@launch
                 }
 
-                    val slides = rawSections.map { section ->
+                val slides = rawSections.map { section ->
                     val title = section.lines().first().replace("## ", "")
                     var body = section.lines().drop(1).joinToString("\n").trim()
                     
-                    // Превращаем **текст** в жирный шрифт
                     body = body.replace(Regex("\\*\\*(.*?)\\*\\*"), "<b>$1</b>")
-                    
-                    // Заменяем звездочки в начале строк на точки
                     body = body.replace(Regex("(?m)^\\* "), "• ")
-                    
-                    // Переносы строк превращаем в HTML-теги
                     body = body.replace("\n", "<br>")
                     
                     "<h3 style='color:#D81B60;'>$title</h3><br>$body"
@@ -693,6 +699,8 @@ class MainActivity : AppCompatActivity() {
                 var currentIndex = 0
 
                 withContext(Dispatchers.Main) {
+                    if (isFinishing || isDestroyed) return@withContext
+
                     val builder = AlertDialog.Builder(this@MainActivity)
                     builder.setTitle(getString(R.string.history_title))
                     
@@ -728,7 +736,9 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, getString(R.string.error_history_load), Toast.LENGTH_LONG).show()
+                    if (!isFinishing && !isDestroyed) {
+                        Toast.makeText(this@MainActivity, getString(R.string.error_history_load), Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         }
@@ -739,6 +749,7 @@ class MainActivity : AppCompatActivity() {
         val savedString = items.joinToString("|") { "${it.link};;${it.displayName};;${it.ping}" }
         val dateStr = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
         val currentNetName = getNetworkName() // Запоминаем имя сети в момент сохранения
+
         
         prefs.edit()
             .putString("last_result_$netId", savedString)
@@ -756,6 +767,7 @@ class MainActivity : AppCompatActivity() {
         
         val saved = prefs.getString("last_result_$netId", "") ?: ""
         val lastDate = prefs.getString("last_check_date_$netId", "") ?: ""
+
         // ЧИТАЕМ СОХРАНЕННОЕ ИМЯ СЕТИ. Если его нет (старые данные) - берем текущее
         val savedNetName = prefs.getString("last_check_net_name_$netId", currentNetName) ?: currentNetName
         
