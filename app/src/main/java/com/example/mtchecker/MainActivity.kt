@@ -580,57 +580,80 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    // --- ФУНКЦИЯ ДЛЯ ОТОБРАЖЕНИЯ СПРАВКИ (OFFLINE-FIRST) ---
+    // --- ФУНКЦИЯ ДЛЯ ОТОБРАЖЕНИЯ СПРАВКИ ---
     private fun showHelpDialog() {
-        val isRussian = Locale.getDefault().language == "ru"
-        val prefKey = if (isRussian) "cached_help_ru" else "cached_help_en"
-        val assetFileName = if (isRussian) "help_ru.md" else "help_en.md"
-        
-        val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-        
-        var helpText = prefs.getString(prefKey, null)
-        if (helpText == null) {
-            try {
-                val inputStream = assets.open(assetFileName)
-                helpText = inputStream.bufferedReader().use { it.readText() }
-            } catch (e: Exception) {
-                helpText = "Текст справки недоступен."
-            }
+        if (!isNetworkAvailable()) {
+            Toast.makeText(this, "Нет подключения к интернету", Toast.LENGTH_SHORT).show()
+            return
         }
 
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(getString(R.string.help_title))
-            .setMessage(Html.fromHtml(helpText.replace("\n", "<br>").replace("* ", "• "), Html.FROM_HTML_MODE_LEGACY))
-            .setPositiveButton(getString(R.string.btn_close), null)
-            .create()
-            
-        dialog.show()
+        val loadingToast = Toast.makeText(this, getString(R.string.loading_help), Toast.LENGTH_SHORT)
+        loadingToast.show()
 
-        if (isNetworkAvailable()) {
-            CoroutineScope(Dispatchers.IO).launch {
-                try {
-                    val fileName = if (isRussian) "HELP_RU.md" else "HELP.md"
-                    val url = URL("https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/$fileName")
-                    
-                    val connection = url.openConnection() as HttpURLConnection
-                    connection.connectTimeout = 5000
-                    connection.readTimeout = 5000
-                    val newText = connection.inputStream.bufferedReader().use { it.readText() }
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val isRussian = Locale.getDefault().language == "ru"
+                val fileName = if (isRussian) "HELP_RU.md" else "HELP.md"
+                
+                val url = URL("https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/$fileName")
+                val text = url.readText()
+                
+                val htmlText = text.replace("\n", "<br>").replace("* ", "• ")
 
-                    if (newText != helpText) {
-                        prefs.edit().putString(prefKey, newText).apply()
-                        
-                        withContext(Dispatchers.Main) {
-                            if (dialog.isShowing) {
-                                dialog.setMessage(Html.fromHtml(newText.replace("\n", "<br>").replace("* ", "• "), Html.FROM_HTML_MODE_LEGACY))
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    // Игнорируем ошибки сети, так как мы уже показали локальную справку
+                withContext(Dispatchers.Main) {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle(getString(R.string.help_title))
+                        .setMessage(Html.fromHtml(htmlText, Html.FROM_HTML_MODE_LEGACY))
+                        .setPositiveButton(getString(R.string.btn_close), null)
+                        .show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, getString(R.string.error_help_load), Toast.LENGTH_LONG).show()
                 }
             }
         }
+    }
+
+    private fun saveResult(items: List<ProxyItem>, netId: String) {
+        val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        val savedString = items.joinToString("|") { "${it.link};;${it.displayName};;${it.ping}" }
+        val dateStr = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
+        
+        prefs.edit()
+            .putString("last_result_$netId", savedString)
+            .putString("last_check_date_$netId", dateStr)
+            .apply()
+    }
+
+    private fun loadSavedResult() {
+        val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        val netId = getNetworkIdentifier()
+        val netName = getNetworkName()
+        
+        val saved = prefs.getString("last_result_$netId", "") ?: ""
+        val lastDate = prefs.getString("last_check_date_$netId", "") ?: ""
+        
+        adapter.clear()
+        
+        progressBar.max = 100
+        progressBar.progress = 0
+        
+        if (saved.isNotEmpty()) {
+            val items = saved.split("|").mapNotNull { 
+                val parts = it.split(";;")
+                if (parts.size == 3) ProxyItem(parts[0], parts[1], parts[2].toLongOrNull() ?: 0L) else null
+            }
+            adapter.items.addAll(items)
+            adapter.notifyDataSetChanged()
+            
+            if (lastDate.isNotEmpty()) {
+                statusText.text = "Проверка ($netName): $lastDate"
+            }
+        } else {
+            statusText.text = getString(R.string.status_ready)
+        }
+        recheckButton.isEnabled = adapter.items.isNotEmpty()
     }
 
     // --- СЛАЙДЕР ИСТОРИИ ИЗМЕНЕНИЙ ---
@@ -699,47 +722,5 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-    }
-    
-    // --- СОХРАНЕНИЕ И ЗАГРУЗКА РЕЗУЛЬТАТОВ ---
-    private fun saveResult(items: List<ProxyItem>, netId: String) {
-        val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-        val savedString = items.joinToString("|") { "${it.link};;${it.displayName};;${it.ping}" }
-        val dateStr = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
-        
-        prefs.edit()
-            .putString("last_result_$netId", savedString)
-            .putString("last_check_date_$netId", dateStr)
-            .apply()
-    }
-
-    private fun loadSavedResult() {
-        val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-        val netId = getNetworkIdentifier()
-        val netName = getNetworkName()
-        
-        val saved = prefs.getString("last_result_$netId", "") ?: ""
-        val lastDate = prefs.getString("last_check_date_$netId", "") ?: ""
-        
-        adapter.clear()
-        
-        progressBar.max = 100
-        progressBar.progress = 0
-        
-        if (saved.isNotEmpty()) {
-            val items = saved.split("|").mapNotNull { 
-                val parts = it.split(";;")
-                if (parts.size == 3) ProxyItem(parts[0], parts[1], parts[2].toLongOrNull() ?: 0L) else null
-            }
-            adapter.items.addAll(items)
-            adapter.notifyDataSetChanged()
-            
-            if (lastDate.isNotEmpty()) {
-                statusText.text = "Проверка ($netName): $lastDate"
-            }
-        } else {
-            statusText.text = getString(R.string.status_ready)
-        }
-        recheckButton.isEnabled = adapter.items.isNotEmpty()
     }
 }
