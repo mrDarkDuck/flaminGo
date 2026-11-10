@@ -24,4 +24,6 @@
 *(Вы можете запретить доступ к геолокации и звонкам, приложение продолжит работать, но будет сохранять списки под общим именем «Wi-Fi» или «Mobile»).*
 
 ---
-* **Исходный код проекта:** [github.com/mrDarkDuck/flaminGo](https://github.com/mrDarkDuck/flaminGo)
+---
+* **Исходный код и релизы:** [github.com/mrDarkDuck/flaminGo](https://github.com/mrDarkDuck/flaminGo)
+* **Нашли баг или есть идея?** Создайте **Issue** (вопрос) в репозитории на GitHub. Это лучший способ связаться с разработчиком.
