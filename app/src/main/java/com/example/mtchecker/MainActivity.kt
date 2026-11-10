@@ -604,7 +604,7 @@ class MainActivity : AppCompatActivity() {
 
         val dialog = AlertDialog.Builder(this)
             .setTitle(getString(R.string.help_title))
-            .setMessage(Html.fromHtml(helpText.replace("\n", "<br>").replace("* ", "• "), Html.FROM_HTML_MODE_LEGACY))
+            .setMessage(Html.fromHtml(helpText!!.replace("\n", "<br>").replace("* ", "• "), Html.FROM_HTML_MODE_LEGACY))
             .setPositiveButton(getString(R.string.btn_close), null)
             .create()
             
