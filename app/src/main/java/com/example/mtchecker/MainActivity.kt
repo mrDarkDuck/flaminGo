@@ -628,7 +628,7 @@ class MainActivity : AppCompatActivity() {
                 try {
                     val fileName = if (isRussian) "HELP_RU.md" else "HELP.md"
                     val timestamp = System.currentTimeMillis()
-                    val url = URL("https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/$fileName?t=$timestamp")
+                    val url = URL("https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/$fileName?t=${System.currentTimeMillis()}")
                     
                     val connection = url.openConnection() as HttpURLConnection
                     connection.setRequestProperty("User-Agent", "FlaminGo-App")
