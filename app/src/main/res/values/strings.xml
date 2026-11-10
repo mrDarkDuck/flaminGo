@@ -8,11 +8,12 @@
     <string name="btn_copy_all">Copy All</string>
     <string name="btn_copy">Copy</string>
     <string name="status_ready">Ready</string>
-    <string name="status_checking">Checking: %1$d / %2$d</string>
+    <string name="status_checking">Checked: %1$d / %2$d</string>
     <string name="status_done">Done! Found: %1$d</string>
-    <string name="version_label">Version: %1$s | Build: %2$s</string>
+    <string name="version_label">Version: %1$s</string>
     <string name="network_wifi">Wi-Fi</string>
     <string name="network_cell">Mobile</string>
+    
     <string name="btn_settings">Settings</string>
     <string name="btn_recheck">ReCheck</string>
     <string name="settings_title">Settings</string>
@@ -25,4 +26,17 @@
     <string name="depth_5">Until 5 working</string>
     <string name="settings_save">Save</string>
     <string name="settings_cancel">Cancel</string>
+
+    <string name="btn_history">Update History</string>
+    <string name="history_title">Update History</string>
+    <string name="btn_next">Next</string>
+    <string name="btn_done">Done</string>
+    <string name="btn_close">Close</string>
+    <string name="loading_history">Loading history...</string>
+    <string name="error_history_load">Failed to load history.</string>
+
+    <string name="btn_help">Help</string>
+    <string name="help_title">App Features</string>
+    <string name="loading_help">Loading help...</string>
+    <string name="error_help_load">Failed to load help.</string>
 </resources>
