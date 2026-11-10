@@ -683,7 +683,7 @@ class MainActivity : AppCompatActivity() {
                     var body = section.lines().drop(1).joinToString("\n").trim()
                     
                     body = body.replace(Regex("\\*\\*(.*?)\\*\\*"), "<b>$1</b>")
-                    body = body.replace(Regex("(?m)^\\* "), "• ")
+                    body = body.replace(Regex("(?m)^\\* "), "🦩 ")
                     body = body.replace("\n", "<br>")
                     
                     "<h3 style='color:#D81B60;'>$title</h3><br>$body"
