@@ -10,9 +10,10 @@
     <string name="status_ready">Готов к работе</string>
     <string name="status_checking">Проверено: %1$d / %2$d</string>
     <string name="status_done">Готово! Найдено: %1$d</string>
-    <string name="version_label">Версия: %1$s | Сборка: %2$s</string>
+    <string name="version_label">Версия: %1$s</string>
     <string name="network_wifi">Wi-Fi</string>
     <string name="network_cell">Мобильная</string>
+    
     <string name="btn_settings">Настройки</string>
     <string name="btn_recheck">Перепроверить</string>
     <string name="settings_title">Настройки</string>
@@ -25,4 +26,17 @@
     <string name="depth_5">До 5 рабочих</string>
     <string name="settings_save">Сохранить</string>
     <string name="settings_cancel">Отмена</string>
+
+    <string name="btn_history">История обновлений</string>
+    <string name="history_title">История обновлений</string>
+    <string name="btn_next">Далее</string>
+    <string name="btn_done">Готово</string>
+    <string name="btn_close">Закрыть</string>
+    <string name="loading_history">Загрузка истории...</string>
+    <string name="error_history_load">Ошибка загрузки истории.</string>
+
+    <string name="btn_help">Справка</string>
+    <string name="help_title">Возможности приложения</string>
+    <string name="loading_help">Загрузка справки...</string>
+    <string name="error_help_load">Ошибка загрузки справки.</string>
 </resources>
