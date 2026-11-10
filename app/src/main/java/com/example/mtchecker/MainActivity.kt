@@ -675,7 +675,7 @@ class MainActivity : AppCompatActivity() {
                     body = body.replace(Regex("\\*\\*(.*?)\\*\\*"), "<b>$1</b>")
                     
                     // Заменяем звездочки в начале строк на точки
-                    body = body.replace(Regex("(?m)^\\* "), "• ")
+                    body = body.replace(Regex("(?m)^\\* "), "🦩 ")
                     
                     // Переносы строк превращаем в HTML-теги
                     body = body.replace("\n", "<br>")
