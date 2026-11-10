@@ -667,10 +667,20 @@ class MainActivity : AppCompatActivity() {
                     return@launch
                 }
 
-                val slides = rawSections.map { section ->
+                    val slides = rawSections.map { section ->
                     val title = section.lines().first().replace("## ", "")
-                    val body = section.lines().drop(1).joinToString("\n").trim()
-                    "<h3 style='color:#D81B60;'>$title</h3><br>${body.replace("\n", "<br>• ")}"
+                    var body = section.lines().drop(1).joinToString("\n").trim()
+                    
+                    // Превращаем **текст** в жирный шрифт
+                    body = body.replace(Regex("\\*\\*(.*?)\\*\\*"), "<b>$1</b>")
+                    
+                    // Заменяем звездочки в начале строк на точки
+                    body = body.replace(Regex("(?m)^\\* "), "• ")
+                    
+                    // Переносы строк превращаем в HTML-теги
+                    body = body.replace("\n", "<br>")
+                    
+                    "<h3 style='color:#D81B60;'>$title</h3><br>$body"
                 }
 
                 var currentIndex = 0
