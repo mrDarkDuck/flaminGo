@@ -36,8 +36,7 @@ import java.util.Locale
 
 class 
 
-Activity : AppCompatActivity() {
-
+class MainActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
     private lateinit var networkText: TextView
     private lateinit var lastCheckText: TextView
