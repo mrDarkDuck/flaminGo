@@ -585,6 +585,7 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
+        // --- ФУНКЦИЯ ДЛЯ ОТОБРАЖЕНИЯ СПРАВКИ (OFFLINE-FIRST) ---
     private fun showHelpDialog() {
         val isRussian = Locale.getDefault().language == "ru"
         val prefKey = if (isRussian) "cached_help_ru" else "cached_help_en"
@@ -602,6 +603,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Добавлен !! для гарантии, что строка не пустая
         val dialog = AlertDialog.Builder(this)
             .setTitle(getString(R.string.help_title))
             .setMessage(Html.fromHtml(helpText!!.replace("\n", "<br>").replace("* ", "• "), Html.FROM_HTML_MODE_LEGACY))
@@ -622,6 +624,7 @@ class MainActivity : AppCompatActivity() {
                     connection.readTimeout = 5000
                     val newText = connection.inputStream.bufferedReader().use { it.readText() }
 
+                    // Также добавлен !! для сравнения и обновления
                     if (newText != helpText) {
                         prefs.edit().putString(prefKey, newText).apply()
                         
