@@ -10,4 +10,10 @@
 * **ReCheck (↻):** The arrow button allows you to quickly re-verify only the already found working links without downloading the whole list again.
 
 ---
+### ⚠️ Important Information (Disclaimer)
+* **Link availability is variable:** Even if a proxy was working 5 minutes ago, it may stop working. This depends on your ISP (DPI blocks), current server load, time of day, and other network restrictions.
+* **How it works:** The app only checks the technical ability to establish a TCP connection with the server (whether the port is open). It does NOT guarantee that Telegram traffic will pass through this proxy *right now*.
+* **Recommendation:** Try using several different working links from the list one by one if one of them stops connecting.
+
+---
 * **Source code:** [github.com/mrDarkDuck/flaminGo](https://github.com/mrDarkDuck/flaminGo)
