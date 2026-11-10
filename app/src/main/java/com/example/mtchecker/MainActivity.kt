@@ -223,7 +223,6 @@ class MainActivity : AppCompatActivity() {
                 val url = URL("https://api.github.com/repos/mrDarkDuck/flaminGo/releases/latest")
                 val connection = url.openConnection() as HttpURLConnection
                 connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
-                // ДОБАВЛЯЕМ USER-AGENT, чтобы GitHub API не блокировал запрос
                 connection.setRequestProperty("User-Agent", "FlaminGo-App")
                 connection.connectTimeout = 10000
                 connection.readTimeout = 10000
@@ -585,7 +584,7 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
-        // --- ФУНКЦИЯ ДЛЯ ОТОБРАЖЕНИЯ СПРАВКИ (OFFLINE-FIRST) ---
+    // --- ФУНКЦИЯ ДЛЯ ОТОБРАЖЕНИЯ СПРАВКИ (OFFLINE-FIRST) ---
     private fun showHelpDialog() {
         val isRussian = Locale.getDefault().language == "ru"
         val prefKey = if (isRussian) "cached_help_ru" else "cached_help_en"
@@ -603,7 +602,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Добавлен !! для гарантии, что строка не пустая
         val dialog = AlertDialog.Builder(this)
             .setTitle(getString(R.string.help_title))
             .setMessage(Html.fromHtml(helpText!!.replace("\n", "<br>").replace("* ", "• "), Html.FROM_HTML_MODE_LEGACY))
@@ -624,7 +622,6 @@ class MainActivity : AppCompatActivity() {
                     connection.readTimeout = 5000
                     val newText = connection.inputStream.bufferedReader().use { it.readText() }
 
-                    // Также добавлен !! для сравнения и обновления
                     if (newText != helpText) {
                         prefs.edit().putString(prefKey, newText).apply()
                         
@@ -639,6 +636,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // --- СЛАЙДЕР ИСТОРИИ ИЗМЕНЕНИЙ ---
     private fun showChangelogDialog(isFromSettings: Boolean) {
         if (!isNetworkAvailable()) {
             Toast.makeText(this, "Нет подключения к интернету", Toast.LENGTH_SHORT).show()
@@ -658,7 +656,9 @@ class MainActivity : AppCompatActivity() {
                 connection.setRequestProperty("User-Agent", "FlaminGo-App")
                 val fullText = connection.inputStream.bufferedReader().use { it.readText() }
                 
-                val rawSections = fullText.split(Regex("(?=## )")).filter { it.isNotBlank() }
+                // Берем только блоки, которые начинаются с "## " (отсекаем H1 заголовок)
+                val rawSections = fullText.split(Regex("(?=## )"))
+                    .filter { it.isNotBlank() && it.trim().startsWith("## ") }
                 
                 if (rawSections.isEmpty()) {
                     withContext(Dispatchers.Main) {
@@ -682,18 +682,31 @@ class MainActivity : AppCompatActivity() {
                     val htmlText = Html.fromHtml(slides[currentIndex], Html.FROM_HTML_MODE_LEGACY)
                     builder.setMessage(htmlText)
                     
+                    // Изначально кнопки "Далее" и "Закрыть"
                     builder.setPositiveButton(getString(R.string.btn_next)) { _, _ -> }
                     builder.setNegativeButton(getString(R.string.btn_close), null)
 
-                    val dialog = builder.create()
-                    dialog.show()
+                    val dialog = builder.show() // Сразу показываем диалог
 
-                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    // Настраиваем кнопки после показа
+                    val posBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                    val negBtn = dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
+
+                    // Если это первый слайд и он единственный - сразу меняем на "Закрыть" и прячем левую кнопку
+                    if (slides.size == 1) {
+                        posBtn.text = getString(R.string.btn_close)
+                        negBtn.visibility = android.view.View.GONE
+                    }
+
+                    posBtn.setOnClickListener {
                         currentIndex++
                         if (currentIndex < slides.size) {
                             dialog.setMessage(Html.fromHtml(slides[currentIndex], Html.FROM_HTML_MODE_LEGACY))
+                            
+                            // Если дошли до последнего слайда
                             if (currentIndex == slides.size - 1) {
-                                dialog.getButton(AlertDialog.BUTTON_POSITIVE).text = getString(R.string.btn_done)
+                                posBtn.text = getString(R.string.btn_close) // Меняем "Далее" на "Закрыть"
+                                negBtn.visibility = android.view.View.GONE // Прячем кнопку "Закрыть" слева, чтобы не дублировалась
                             }
                         } else {
                             dialog.dismiss()
