@@ -1,8 +1,8 @@
-## Version 1.101 (Stability)
-* **Socket leak fixed:** The app will no longer exhaust system resources when checking hundreds of dead proxies.
-* **"Stop" button hang fixed:** The stop button now correctly resets the UI and stops the background service.
-* **Crash protection:** Eliminated potential crashes (NullPointerException) when receiving an empty list or closing the app.
-* **Thread optimization:** The slow proxy queue now uses a thread-safe collection, speeding up processing.
+## Version 2.0.0 (Deep Update)
+* **Deep MTProto Check:** The app now checks not just if the port is open (TCP), but sends a real cryptographic request. This filters out "dead" servers that are open but do not pass Telegram traffic.
+* **New Versioning:** Transitioned to the V2.0.XXX format.
+* **Improved Link Parsing:** Links with secrets are now parsed correctly.
+* **Increased Stability:** Fixed socket leaks during checks.
 
 ## Version 1.100 (Major Update)
 * **New UI:** The "What's New" button now only appears when there are unread updates.
