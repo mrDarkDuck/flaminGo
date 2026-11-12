@@ -38,14 +38,22 @@
         <RadioButton android:id="@+id/depth5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/depth_5"/>
     </RadioGroup>
 
-    <CheckBox
-        android:id="@+id/onlyFastCheck"
+    <!-- ЗАМЕНА ЧЕКБОКСА НА ВВОД ПИНГА -->
+    <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/settings_only_fast"
+        android:text="@string/settings_max_ping"
+        android:textStyle="bold"
+        android:layout_marginBottom="4dp"/>
+
+    <EditText
+        android:id="@+id/maxPingInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="@string/settings_max_ping_hint"
+        android:inputType="number"
         android:layout_marginBottom="16dp"/>
 
-    <!-- Ссылки внизу настроек -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
