@@ -22,7 +22,7 @@ class ProxyAdapter(val items: MutableList<ProxyItem>) : RecyclerView.Adapter<Pro
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val pingText: TextView = view.findViewById(R.id.pingText)
         val copyBtn: Button = view.findViewById(R.id.copyBtn)
-        val telegramBtn: Button = view.findViewById(R.id.telegramBtn) // Новая кнопка
+        val telegramBtn: Button = view.findViewById(R.id.telegramBtn)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -34,9 +34,9 @@ class ProxyAdapter(val items: MutableList<ProxyItem>) : RecyclerView.Adapter<Pro
         val item = items[position]
         
         val color = when {
-            item.ping < 150 -> Color.parseColor("#4CAF50")
-            item.ping < 400 -> Color.parseColor("#FFC107")
-            else -> Color.parseColor("#F44336")
+            item.ping < 150 -> Color.parseColor("#4CAF50") // Зеленый
+            item.ping < 400 -> Color.parseColor("#FFC107") // Желтый
+            else -> Color.parseColor("#F44336") // Красный
         }
         holder.pingText.text = "${item.displayName} | ${item.ping} ms"
         holder.pingText.setTextColor(color)
@@ -57,12 +57,17 @@ class ProxyAdapter(val items: MutableList<ProxyItem>) : RecyclerView.Adapter<Pro
 
     override fun getItemCount() = items.size
 
+    // УМНАЯ ВСТАВКА С СОРТИРОВКОЙ
     fun addItem(item: ProxyItem) {
+        // Ищем индекс, где текущий элемент медленнее нового
         val index = items.indexOfFirst { it.ping > item.ping }
+        
         if (index == -1) {
+            // Если все быстрее или список пуст - добавляем в конец
             items.add(item)
             notifyItemInserted(items.size - 1)
         } else {
+            // Вставляем на нужное место
             items.add(index, item)
             notifyItemInserted(index)
         }
@@ -73,15 +78,13 @@ class ProxyAdapter(val items: MutableList<ProxyItem>) : RecyclerView.Adapter<Pro
         notifyDataSetChanged()
     }
 
-    // ФУНКЦИЯ ДЛЯ ОТКРЫТИЯ ССЫЛКИ В ТЕЛЕГРАМ
     private fun openProxyInTelegram(context: Context, link: String) {
-        // Список пакетов популярных клиентов Telegram
         val telegramPackages = listOf(
-            "org.telegram.messenger",      // Официальный
-            "org.telegram.plus",           // Plus Messenger
-            "com.radolyn.ayugram",         // AyuGram
-            "tw.nekomimi.nekogram",        // Nekogram
-            "org.thunderdog.challegram"    // Telegram X
+            "org.telegram.messenger",
+            "org.telegram.plus",
+            "com.radolyn.ayugram",
+            "tw.nekomimi.nekogram",
+            "org.thunderdog.challegram"
         )
 
         var targetPackage: String? = null
@@ -92,12 +95,9 @@ class ProxyAdapter(val items: MutableList<ProxyItem>) : RecyclerView.Adapter<Pro
             }
         }
 
-        // Если в ссылке есть https://t.me/..., лучше заменить на tg:// для прямого открытия
         val deepLink = link.replace("https://t.me/", "tg://")
-
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(deepLink)).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            // Если нашли Telegram, открываем строго в нем
             targetPackage?.let { setPackage(it) }
         }
 
@@ -108,7 +108,6 @@ class ProxyAdapter(val items: MutableList<ProxyItem>) : RecyclerView.Adapter<Pro
         }
     }
 
-    // Вспомогательная функция проверки наличия приложения
     private fun isAppInstalled(context: Context, packageName: String): Boolean {
         return try {
             context.packageManager.getPackageInfo(packageName, 0)
