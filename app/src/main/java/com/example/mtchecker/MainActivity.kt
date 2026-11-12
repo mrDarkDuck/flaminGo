@@ -548,7 +548,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showSettingsDialog() {
+       private fun showSettingsDialog() {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val dialogView = layoutInflater.inflate(R.layout.dialog_settings, null)
         
@@ -567,9 +567,12 @@ class MainActivity : AppCompatActivity() {
             else -> depthGroup.check(R.id.depthAll)
         }
         
-        val currentMaxPing = prefs.getInt("max_ping", 0)
+        // ЗАГРУЖАЕМ ПИНГ. Если в настройках ничего нет, ставим 150 по умолчанию.
+        val currentMaxPing = prefs.getInt("max_ping", 150)
         if (currentMaxPing > 0) {
             maxPingInput.setText(currentMaxPing.toString())
+        } else {
+            maxPingInput.setText("") // Если 0, оставляем поле пустым
         }
 
         val dialog = AlertDialog.Builder(this)
@@ -586,8 +589,18 @@ class MainActivity : AppCompatActivity() {
                     else -> 0
                 }
 
+                // СОХРАНЯЕМ ПИНГ С ОГРАНИЧЕНИЯМИ
                 val maxPingStr = maxPingInput.text.toString().trim()
-                val maxPing = if (maxPingStr.isEmpty()) 0 else maxPingStr.toIntOrNull() ?: 0
+                var maxPing = if (maxPingStr.isEmpty()) 0 else maxPingStr.toIntOrNull() ?: 150
+                
+                // Защита от дурака: пинг не может быть больше 3000 (таймаут сервиса) 
+                // и не может быть отрицательным.
+                if (maxPing > 3000) {
+                    maxPing = 3000
+                    Toast.makeText(this@MainActivity, "Максимальный пинг ограничен 3000 мс", Toast.LENGTH_SHORT).show()
+                } else if (maxPing < 0) {
+                    maxPing = 0
+                }
 
                 prefs.edit()
                     .putString("list_url", newUrl)
