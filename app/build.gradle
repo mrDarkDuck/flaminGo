@@ -11,14 +11,14 @@ android {
     namespace 'com.example.mtchecker'
     compileSdk 34
 
-    defaultConfig {
+        defaultConfig {
         applicationId "com.example.mtchecker"
         minSdk 24
         targetSdk 34
         
-        def runNumber = project.hasProperty('runNumber') ? project.property('runNumber').toInteger() : 1
-        versionCode runNumber
-        versionName "1.${runNumber}"
+        // Мы жестко задаем версию 2.0.0 для этого релиза
+        versionCode 200 
+        versionName "2.0.0"
 
         def sdf = new SimpleDateFormat("dd.MM.yyyy HH:mm")
         sdf.setTimeZone(TimeZone.getTimeZone("Europe/Moscow"))
