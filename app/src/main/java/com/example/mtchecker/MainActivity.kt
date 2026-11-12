@@ -216,7 +216,7 @@ class MainActivity : AppCompatActivity() {
                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
-        private fun checkForUpdates(silent: Boolean) {
+            private fun checkForUpdates(silent: Boolean) {
         if (!isNetworkAvailable()) return
 
         lifecycleScope.launch(Dispatchers.IO) {
@@ -229,7 +229,7 @@ class MainActivity : AppCompatActivity() {
                 connection.readTimeout = 10000
                 val response = connection.inputStream.bufferedReader().use { it.readText() }
                 
-                // НОВАЯ РЕГУЛЯРКА ДЛЯ v2.0.0
+                // Новая регулярка для формата v2.0.123
                 val tagRegex = Regex(""""tag_name"\s*:\s*"v(\d+)\.(\d+)\.(\d+)"""")
                 val match = tagRegex.find(response)
                 
@@ -237,7 +237,7 @@ class MainActivity : AppCompatActivity() {
                 val minor = match?.groupValues?.get(2)?.toIntOrNull() ?: 0
                 val patch = match?.groupValues?.get(3)?.toIntOrNull() ?: 0
                 
-                // Переводим в единый вес (например, 2.0.0 = 20000, 2.0.1 = 20001)
+                // Переводим в общий вес (для сравнения)
                 val latestVersionCode = (major * 10000) + (minor * 100) + patch
                 
                 val apkRegex = Regex(""""browser_download_url"\s*:\s*"([^"]+\.apk)"""")
