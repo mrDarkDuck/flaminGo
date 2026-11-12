@@ -13,12 +13,12 @@ import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
-import java.security.SecureRandom
 import kotlin.coroutines.coroutineContext
 
 class CheckService : Service() {
@@ -85,7 +85,6 @@ class CheckService : Service() {
     }
 
     private suspend fun performChecks(text: String, limit: Int, onlyFast: Boolean) {
-        // Обновленная регулярка: захватываем server, port и secret
         val regex = Regex("""server=([^&]+).*?port=(\d+).*?secret=([^&]+)""")
         val allProxies = regex.findAll(text).mapNotNull { match ->
             val server = match.groupValues[1].trimEnd('.')
@@ -109,7 +108,7 @@ class CheckService : Service() {
         val checkedCount = AtomicInteger(0)
 
         // --- ПРОХОД 1: БЫСТРОЕ СИТО (1 секунда, TCP) ---
-        updateNotification("Быстрая TCP-проверка (1 сек)...")
+        updateNotification("Быстрая проверка (1 сек)...")
         coroutineScope {
             for (proxy in allProxies) {
                 if (limit > 0 && foundCount.get() >= limit) break
@@ -121,11 +120,12 @@ class CheckService : Service() {
 
                         val startTime = System.currentTimeMillis()
                         if (isServerAlive(proxy.first, proxy.second, timeoutMs = 1000)) {
-                            // Прошел TCP. Теперь проверяем, нужна ли глубокая проверка.
-                            // Если это dd-секрет, делаем глубокую проверку. Если ee - оставляем как есть (для скорости).
-                            val ping = System.currentTimeMillis() - startTime
-                            if (!(onlyFast && ping >= 150)) {
-                                addResult(proxy, ping, text, foundCount)
+                            // ИСПРАВЛЕНИЕ: Теперь вызываем ГЛУБОКУЮ проверку для прошедших TCP
+                            if (checkMTProtoDeep(proxy.first, proxy.second, proxy.third, 3000)) {
+                                val ping = System.currentTimeMillis() - startTime
+                                if (!(onlyFast && ping >= 150)) {
+                                    addResult(proxy, ping, text, foundCount)
+                                }
                             }
                         } else {
                             retryList.add(proxy)
@@ -155,8 +155,11 @@ class CheckService : Service() {
 
                             val startTime = System.currentTimeMillis()
                             if (isServerAlive(proxy.first, proxy.second, timeoutMs = 3000)) {
-                                val ping = System.currentTimeMillis() - startTime
-                                addResult(proxy, ping, text, foundCount)
+                                // ИСПРАВЛЕНИЕ: И здесь тоже вызываем ГЛУБОКУЮ проверку
+                                if (checkMTProtoDeep(proxy.first, proxy.second, proxy.third, 3000)) {
+                                    val ping = System.currentTimeMillis() - startTime
+                                    addResult(proxy, ping, text, foundCount)
+                                }
                             }
                         }
                     }
@@ -181,7 +184,6 @@ class CheckService : Service() {
         }
     }
 
-    // --- БЫСТРАЯ TCP ПРОВЕРКА ---
     private fun isServerAlive(host: String, port: Int, timeoutMs: Int): Boolean {
         var socket: Socket? = null
         return try {
@@ -196,11 +198,10 @@ class CheckService : Service() {
     }
 
     // --- ГЛУБОКАЯ MTProto ПРОВЕРКА (Obfuscated2) ---
-    // Проверяет секреты, начинающиеся с "dd". 
-    // Для FakeTLS ("ee") пока возвращает true (полагается на TCP), чтобы не усложнять код.
     private fun checkMTProtoDeep(host: String, port: Int, secretHex: String, timeoutMs: Int): Boolean {
+        // Пока делаем только для dd-секретов (самые популярные)
         if (!secretHex.startsWith("dd", ignoreCase = true)) {
-            return true // Пропускаем глубокую проверку для FakeTLS
+            return true 
         }
 
         var socket: Socket? = null
@@ -211,47 +212,48 @@ class CheckService : Service() {
 
             // 1. Генерируем 64 случайных байта
             val random = ByteArray(64)
-            SecureRandom().nextBytes(random)
+            java.security.SecureRandom().nextBytes(random)
             
-            // Защита от случайного совпадения с HTTP-заголовками
+            // Защита от HTTP (первые байты не должны быть GET, POST, HEAD)
             if (random[0] == 0x48.toByte() && random[1] == 0x45.toByte()) random[0] = 0x01 // HE
             if (random[0] == 0x50.toByte() && random[1] == 0x4F.toByte()) random[0] = 0x01 // PO
             if (random[0] == 0x47.toByte() && random[1] == 0x45.toByte()) random[0] = 0x01 // GE
 
-            // Записываем маркер протокола (байты 56-59: \xee\xee\xee\xee)
+            // Маркер протокола MTProto
             random[56] = 0xEE.toByte()
             random[57] = 0xEE.toByte()
             random[58] = 0xEE.toByte()
             random[59] = 0xEE.toByte()
 
-            // 2. Извлекаем ключ из секрета
+            // 2. Извлекаем ключ из секрета (пропускаем "dd")
             val secretBytes = ByteArray((secretHex.length - 2) / 2)
             for (i in secretBytes.indices) {
                 val index = i * 2 + 2
                 secretBytes[i] = secretHex.substring(index, index + 2).toInt(16).toByte()
             }
-            val key = SecretKeySpec(secretBytes.copyOfRange(0, 16), "AES")
 
-            // 3. Шифруем (CTR)
-            // В настоящем MTProxy IV берется из хэша, но для простой проверки
-            // достаточно отправить валидный мусор с маркером. Сервер, если он живой,
-            // попытается расшифровать и ответит.
-            // Для 100% точности (как TDLib) нужна полная реализация.
-            // Мы используем упрощенный вариант: отправляем зашифрованный маркер.
+            // 3. Вычисляем SHA256 от секрета для IV
+            val digest = MessageDigest.getInstance("SHA-256")
+            digest.update(secretBytes)
+            val hash = digest.digest()
+            
+            val key = SecretKeySpec(hash.copyOfRange(0, 16), "AES")
+            val iv = IvParameterSpec(random.copyOfRange(32, 48)) // Используем кусок рандома
+
+            // 4. Шифруем (AES-CTR)
             val cipher = Cipher.getInstance("AES/CTR/NoPadding")
-            val iv = IvParameterSpec(random.copyOfRange(32, 48)) // Используем кусок рандома как IV
             cipher.init(Cipher.ENCRYPT_MODE, key, iv)
             
             val encrypted = cipher.doFinal(random)
             
+            // 5. Отправляем
             socket.getOutputStream().write(encrypted)
             socket.getOutputStream().flush()
 
-            // 4. Ждем ответ от сервера
+            // 6. Ждем ответ. Если сервер прислал данные или не закрыл соединение (не EOF) - значит работает.
             val buffer = ByteArray(1024)
             val bytesRead = socket.getInputStream().read(buffer)
             
-            // Если сервер прислал хоть какие-то данные (не EOF и не таймаут), значит порт реально пропускает MTProto
             return bytesRead > 0
         } catch (e: Exception) {
             return false
