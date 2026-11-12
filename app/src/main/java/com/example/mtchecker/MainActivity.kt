@@ -778,7 +778,7 @@ class MainActivity : AppCompatActivity() {
         lastCheckText.text = "Проверка ($currentNetName): $dateStr"
     }
 
-    private fun loadSavedResult() {
+        private fun loadSavedResult() {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val netId = getNetworkIdentifier()
         val currentNetName = getNetworkName()
@@ -796,7 +796,8 @@ class MainActivity : AppCompatActivity() {
             val items = saved.split("|").mapNotNull { 
                 val parts = it.split(";;")
                 if (parts.size == 3) ProxyItem(parts[0], parts[1], parts[2].toLongOrNull() ?: 0L) else null
-            }
+            }.sortedBy { it.ping } // <--- ДОБАВЛЕНА СОРТИРОВКА ПРИ ЗАГРУЗКЕ
+            
             adapter.items.addAll(items)
             adapter.notifyDataSetChanged()
             
@@ -811,4 +812,3 @@ class MainActivity : AppCompatActivity() {
         }
         recheckButton.isEnabled = adapter.items.isNotEmpty()
     }
-}
