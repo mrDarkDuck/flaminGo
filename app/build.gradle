@@ -16,8 +16,8 @@ android {
         minSdk 24
         targetSdk 34
         
-        // АВТОМАТИЧЕСКАЯ ВЕРСИЯ 2.0.XXX
-        def runNumber = project.hasProperty('runNumber') ? project.property('runNumber').toInt() : 1
+        // ИСПРАВЛЕНО: toInteger() вместо toInt()
+        def runNumber = project.hasProperty('runNumber') ? project.property('runNumber').toInteger() : 1
         versionCode 20000 + runNumber
         versionName "2.0.${runNumber}"
 
