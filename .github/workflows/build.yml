@@ -54,10 +54,19 @@ jobs:
           name: FlaminGo-v1.${{ github.run_number }}
           path: app/build/outputs/apk/release/FlaminGo-v1.${{ github.run_number }}.apk
 
+           - name: Rename APK
+        run: mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/FlaminGo-v2.0.${{ github.run_number }}.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlaminGo-v2.0.${{ github.run_number }}
+          path: app/build/outputs/apk/release/FlaminGo-v2.0.${{ github.run_number }}.apk
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.${{ github.run_number }}
-          name: FlaminGo v1.${{ github.run_number }}
-          body_path: CHANGELOG.md
-          files: app/build/outputs/apk/release/FlaminGo-v1.${{ github.run_number }}.apk
+          tag_name: v2.0.${{ github.run_number }}
+          name: FlaminGo v2.0.${{ github.run_number }}
+          body_path: CHANGELOG_RU.md
+          files: app/build/outputs/apk/release/FlaminGo-v2.0.${{ github.run_number }}.apk
