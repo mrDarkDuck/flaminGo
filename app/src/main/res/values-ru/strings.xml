@@ -13,7 +13,9 @@
     <string name="version_label">Версия: %1$s</string>
     <string name="network_wifi">Wi-Fi</string>
     <string name="network_cell">Мобильная</string>
-    
+
+    <string name="settings_max_ping">Максимальный пинг (мс):</string>
+    <string name="settings_max_ping_hint">0 = без ограничений</string>
     <string name="btn_settings">Настройки</string>
     <string name="btn_recheck">Перепроверить</string>
     <string name="settings_title">Настройки</string>
