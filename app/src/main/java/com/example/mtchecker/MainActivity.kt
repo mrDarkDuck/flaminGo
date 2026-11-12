@@ -216,7 +216,7 @@ class MainActivity : AppCompatActivity() {
                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
-    private fun checkForUpdates(silent: Boolean) {
+            private fun checkForUpdates(silent: Boolean) {
         if (!isNetworkAvailable()) return
 
         lifecycleScope.launch(Dispatchers.IO) {
@@ -229,8 +229,16 @@ class MainActivity : AppCompatActivity() {
                 connection.readTimeout = 10000
                 val response = connection.inputStream.bufferedReader().use { it.readText() }
                 
-                val tagRegex = Regex(""""tag_name"\s*:\s*"v1\.(\d+)"""")
-                val latestVersion = tagRegex.find(response)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                // Новая регулярка для формата v2.0.123
+                val tagRegex = Regex(""""tag_name"\s*:\s*"v(\d+)\.(\d+)\.(\d+)"""")
+                val match = tagRegex.find(response)
+                
+                val major = match?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                val minor = match?.groupValues?.get(2)?.toIntOrNull() ?: 0
+                val patch = match?.groupValues?.get(3)?.toIntOrNull() ?: 0
+                
+                // Переводим в общий вес (для сравнения)
+                val latestVersionCode = (major * 10000) + (minor * 100) + patch
                 
                 val apkRegex = Regex(""""browser_download_url"\s*:\s*"([^"]+\.apk)"""")
                 latestApkUrl = apkRegex.find(response)?.groupValues?.get(1)
@@ -238,12 +246,12 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     if (isFinishing || isDestroyed) return@withContext
                     
-                    if (latestVersion > BuildConfig.VERSION_CODE) {
+                    if (latestVersionCode > BuildConfig.VERSION_CODE) {
                         updateButton.visibility = android.view.View.VISIBLE
                         if (!silent) {
                             AlertDialog.Builder(this@MainActivity)
                                 .setTitle("Доступно обновление!")
-                                .setMessage("Установлена версия V1.${BuildConfig.VERSION_CODE}. Доступна V1.$latestVersion.\nСкачать?")
+                                .setMessage("Установлена версия V${BuildConfig.VERSION_NAME}. Доступна V$major.$minor.$patch.\nСкачать?")
                                 .setPositiveButton("Да") { _, _ -> 
                                     updateButton.isEnabled = false
                                     updateButton.text = "⏳"

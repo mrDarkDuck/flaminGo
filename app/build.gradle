@@ -16,9 +16,10 @@ android {
         minSdk 24
         targetSdk 34
         
+        // ИСПРАВЛЕНО: toInteger() вместо toInt()
         def runNumber = project.hasProperty('runNumber') ? project.property('runNumber').toInteger() : 1
-        versionCode runNumber
-        versionName "1.${runNumber}"
+        versionCode 20000 + runNumber
+        versionName "2.0.${runNumber}"
 
         def sdf = new SimpleDateFormat("dd.MM.yyyy HH:mm")
         sdf.setTimeZone(TimeZone.getTimeZone("Europe/Moscow"))
@@ -26,7 +27,6 @@ android {
         buildConfigField "String", "BUILD_TIME", "\"${buildTime}\""
     }
 
-    // НОВЫЙ БЛОК ПОДПИСИ
     signingConfigs {
         release {
             storeFile file("../release.keystore")
