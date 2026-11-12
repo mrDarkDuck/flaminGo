@@ -46,7 +46,7 @@ class CheckService : Service() {
         val customText = intent?.getStringExtra("customText")
         val isCustom = !customText.isNullOrEmpty()
         val limit = intent?.getIntExtra("limit", 0) ?: 0
-        val onlyFast = intent?.getBooleanExtra("onlyFast", false) ?: false
+        val maxPing = intent?.getIntExtra("maxPing", 0) ?: 0
         val isReCheck = intent?.getBooleanExtra("isReCheck", false) ?: false
 
         isRunning = true
@@ -74,7 +74,7 @@ class CheckService : Service() {
                     return@launch
                 }
                 
-                performChecks(text, limit, onlyFast)
+                performChecks(text, limit, maxPing)
             } catch (e: Exception) {
                 broadcastError(e.message ?: "Ошибка загрузки списка")
                 stopSelf()
@@ -84,7 +84,7 @@ class CheckService : Service() {
         return START_NOT_STICKY
     }
 
-    private suspend fun performChecks(text: String, limit: Int, onlyFast: Boolean) {
+    private suspend fun performChecks(text: String, limit: Int, maxPing: Int) {
         val regex = Regex("""server=([^&]+).*?port=(\d+).*?secret=([^&]+)""")
         val allProxies = regex.findAll(text).mapNotNull { match ->
             val server = match.groupValues[1].trimEnd('.')
@@ -107,7 +107,7 @@ class CheckService : Service() {
         val retryList = ConcurrentLinkedQueue<Triple<String, Int, String>>()
         val checkedCount = AtomicInteger(0)
 
-        // --- ПРОХОД 1: БЫСТРОЕ СИТО (1 секунда, TCP) ---
+        // --- ПРОХОД 1: БЫСТРОЕ СИТО (1 секунда) ---
         updateNotification("Быстрая проверка (1 сек)...")
         coroutineScope {
             for (proxy in allProxies) {
@@ -120,10 +120,10 @@ class CheckService : Service() {
 
                         val startTime = System.currentTimeMillis()
                         if (isServerAlive(proxy.first, proxy.second, timeoutMs = 1000)) {
-                            // ИСПРАВЛЕНИЕ: Теперь вызываем ГЛУБОКУЮ проверку для прошедших TCP
+                            // ГЛУБОКАЯ ПРОВЕРКА
                             if (checkMTProtoDeep(proxy.first, proxy.second, proxy.third, 3000)) {
                                 val ping = System.currentTimeMillis() - startTime
-                                if (!(onlyFast && ping >= 150)) {
+                                if (maxPing == 0 || ping <= maxPing) {
                                     addResult(proxy, ping, text, foundCount)
                                 }
                             }
@@ -142,7 +142,7 @@ class CheckService : Service() {
         }
 
         // --- ПРОХОД 2: ГЛУБОКОЕ СИТО (3 секунды) ---
-        if ((limit == 0 || foundCount.get() < limit) && coroutineContext.isActive && !onlyFast) {
+        if ((limit == 0 || foundCount.get() < limit) && coroutineContext.isActive) {
             updateNotification("Глубокая проверка (${retryList.size} шт)...")
             coroutineScope {
                 for (proxy in retryList) {
@@ -155,10 +155,12 @@ class CheckService : Service() {
 
                             val startTime = System.currentTimeMillis()
                             if (isServerAlive(proxy.first, proxy.second, timeoutMs = 3000)) {
-                                // ИСПРАВЛЕНИЕ: И здесь тоже вызываем ГЛУБОКУЮ проверку
+                                // ГЛУБОКАЯ ПРОВЕРКА
                                 if (checkMTProtoDeep(proxy.first, proxy.second, proxy.third, 3000)) {
                                     val ping = System.currentTimeMillis() - startTime
-                                    addResult(proxy, ping, text, foundCount)
+                                    if (maxPing == 0 || ping <= maxPing) {
+                                        addResult(proxy, ping, text, foundCount)
+                                    }
                                 }
                             }
                         }
@@ -197,9 +199,7 @@ class CheckService : Service() {
         }
     }
 
-    // --- ГЛУБОКАЯ MTProto ПРОВЕРКА (Obfuscated2) ---
     private fun checkMTProtoDeep(host: String, port: Int, secretHex: String, timeoutMs: Int): Boolean {
-        // Пока делаем только для dd-секретов (самые популярные)
         if (!secretHex.startsWith("dd", ignoreCase = true)) {
             return true 
         }
@@ -210,47 +210,39 @@ class CheckService : Service() {
             socket.connect(InetSocketAddress(host, port), timeoutMs)
             socket.soTimeout = timeoutMs
 
-            // 1. Генерируем 64 случайных байта
             val random = ByteArray(64)
             java.security.SecureRandom().nextBytes(random)
             
-            // Защита от HTTP (первые байты не должны быть GET, POST, HEAD)
-            if (random[0] == 0x48.toByte() && random[1] == 0x45.toByte()) random[0] = 0x01 // HE
-            if (random[0] == 0x50.toByte() && random[1] == 0x4F.toByte()) random[0] = 0x01 // PO
-            if (random[0] == 0x47.toByte() && random[1] == 0x45.toByte()) random[0] = 0x01 // GE
+            if (random[0] == 0x48.toByte() && random[1] == 0x45.toByte()) random[0] = 0x01
+            if (random[0] == 0x50.toByte() && random[1] == 0x4F.toByte()) random[0] = 0x01
+            if (random[0] == 0x47.toByte() && random[1] == 0x45.toByte()) random[0] = 0x01
 
-            // Маркер протокола MTProto
             random[56] = 0xEE.toByte()
             random[57] = 0xEE.toByte()
             random[58] = 0xEE.toByte()
             random[59] = 0xEE.toByte()
 
-            // 2. Извлекаем ключ из секрета (пропускаем "dd")
             val secretBytes = ByteArray((secretHex.length - 2) / 2)
             for (i in secretBytes.indices) {
                 val index = i * 2 + 2
                 secretBytes[i] = secretHex.substring(index, index + 2).toInt(16).toByte()
             }
 
-            // 3. Вычисляем SHA256 от секрета для IV
             val digest = MessageDigest.getInstance("SHA-256")
             digest.update(secretBytes)
             val hash = digest.digest()
             
             val key = SecretKeySpec(hash.copyOfRange(0, 16), "AES")
-            val iv = IvParameterSpec(random.copyOfRange(32, 48)) // Используем кусок рандома
+            val iv = IvParameterSpec(random.copyOfRange(32, 48))
 
-            // 4. Шифруем (AES-CTR)
             val cipher = Cipher.getInstance("AES/CTR/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, key, iv)
             
             val encrypted = cipher.doFinal(random)
             
-            // 5. Отправляем
             socket.getOutputStream().write(encrypted)
             socket.getOutputStream().flush()
 
-            // 6. Ждем ответ. Если сервер прислал данные или не закрыл соединение (не EOF) - значит работает.
             val buffer = ByteArray(1024)
             val bytesRead = socket.getInputStream().read(buffer)
             
