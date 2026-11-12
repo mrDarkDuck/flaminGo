@@ -216,7 +216,7 @@ class MainActivity : AppCompatActivity() {
                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
-            private fun checkForUpdates(silent: Boolean) {
+    private fun checkForUpdates(silent: Boolean) {
         if (!isNetworkAvailable()) return
 
         lifecycleScope.launch(Dispatchers.IO) {
@@ -229,7 +229,6 @@ class MainActivity : AppCompatActivity() {
                 connection.readTimeout = 10000
                 val response = connection.inputStream.bufferedReader().use { it.readText() }
                 
-                // Новая регулярка для формата v2.0.123
                 val tagRegex = Regex(""""tag_name"\s*:\s*"v(\d+)\.(\d+)\.(\d+)"""")
                 val match = tagRegex.find(response)
                 
@@ -237,7 +236,6 @@ class MainActivity : AppCompatActivity() {
                 val minor = match?.groupValues?.get(2)?.toIntOrNull() ?: 0
                 val patch = match?.groupValues?.get(3)?.toIntOrNull() ?: 0
                 
-                // Переводим в общий вес (для сравнения)
                 val latestVersionCode = (major * 10000) + (minor * 100) + patch
                 
                 val apkRegex = Regex(""""browser_download_url"\s*:\s*"([^"]+\.apk)"""")
@@ -488,14 +486,14 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val targetUrl = prefs.getString("list_url", defaultUrl) ?: defaultUrl
         val limit = prefs.getInt("check_limit", 0)
-        val onlyFast = prefs.getBoolean("only_fast", true)
+        val maxPing = prefs.getInt("max_ping", 0)
 
         prepareUiForCheck()
 
         val serviceIntent = Intent(this, CheckService::class.java).apply {
             putExtra("url", targetUrl)
             putExtra("limit", limit)
-            putExtra("onlyFast", onlyFast)
+            putExtra("maxPing", maxPing)
             if (isCustom) putExtra("customText", customText)
         }
         startServiceCompat(serviceIntent)
@@ -513,14 +511,14 @@ class MainActivity : AppCompatActivity() {
         val linksToRecheck = adapter.items.joinToString("\n") { it.link }
         
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-        val onlyFast = prefs.getBoolean("only_fast", true)
+        val maxPing = prefs.getInt("max_ping", 0)
 
         prepareUiForCheck()
 
         val serviceIntent = Intent(this, CheckService::class.java).apply {
             putExtra("customText", linksToRecheck)
             putExtra("isReCheck", true)
-            putExtra("onlyFast", onlyFast)
+            putExtra("maxPing", maxPing)
         }
         startServiceCompat(serviceIntent)
     }
@@ -556,7 +554,7 @@ class MainActivity : AppCompatActivity() {
         
         val urlInput = dialogView.findViewById<EditText>(R.id.settingsUrl)
         val depthGroup = dialogView.findViewById<RadioGroup>(R.id.depthGroup)
-        val onlyFastCheck = dialogView.findViewById<CheckBox>(R.id.onlyFastCheck)
+        val maxPingInput = dialogView.findViewById<EditText>(R.id.maxPingInput)
         val historyBtn = dialogView.findViewById<TextView>(R.id.historyBtn)
         val helpBtn = dialogView.findViewById<TextView>(R.id.helpBtn)
 
@@ -568,7 +566,11 @@ class MainActivity : AppCompatActivity() {
             5 -> depthGroup.check(R.id.depth5)
             else -> depthGroup.check(R.id.depthAll)
         }
-        onlyFastCheck.isChecked = prefs.getBoolean("only_fast", true)
+        
+        val currentMaxPing = prefs.getInt("max_ping", 0)
+        if (currentMaxPing > 0) {
+            maxPingInput.setText(currentMaxPing.toString())
+        }
 
         val dialog = AlertDialog.Builder(this)
             .setTitle(R.string.settings_title)
@@ -584,10 +586,13 @@ class MainActivity : AppCompatActivity() {
                     else -> 0
                 }
 
+                val maxPingStr = maxPingInput.text.toString().trim()
+                val maxPing = if (maxPingStr.isEmpty()) 0 else maxPingStr.toIntOrNull() ?: 0
+
                 prefs.edit()
                     .putString("list_url", newUrl)
                     .putInt("check_limit", limit)
-                    .putBoolean("only_fast", onlyFastCheck.isChecked)
+                    .putInt("max_ping", maxPing)
                     .apply()
             }
             .setNegativeButton(R.string.settings_cancel, null)
@@ -635,7 +640,6 @@ class MainActivity : AppCompatActivity() {
             lifecycleScope.launch(Dispatchers.IO) {
                 try {
                     val fileName = if (isRussian) "HELP_RU.md" else "HELP.md"
-                    // ДОБАВЛЕН ?t= ДЛЯ СБРОСА КЭША
                     val url = URL("https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/$fileName?t=${System.currentTimeMillis()}")
                     
                     val connection = url.openConnection() as HttpURLConnection
@@ -672,7 +676,6 @@ class MainActivity : AppCompatActivity() {
                 val isRussian = Locale.getDefault().language == "ru"
                 val fileName = if (isRussian) "CHANGELOG_RU.md" else "CHANGELOG.md"
                 
-                // ДОБАВЛЕН ?t= ДЛЯ СБРОСА КЭША
                 val url = URL("https://raw.githubusercontent.com/mrDarkDuck/flaminGo/main/$fileName?t=${System.currentTimeMillis()}")
                 val connection = url.openConnection() as HttpURLConnection
                 connection.setRequestProperty("User-Agent", "FlaminGo-App")
@@ -693,7 +696,7 @@ class MainActivity : AppCompatActivity() {
                     var body = section.lines().drop(1).joinToString("\n").trim()
                     
                     body = body.replace(Regex("\\*\\*(.*?)\\*\\*"), "<b>$1</b>")
-                    body = body.replace(Regex("(?m)^\\* "), "🦩 ") // ВОЗВРАЩАЕМ ФЛАМИНГО
+                    body = body.replace(Regex("(?m)^\\* "), "🦩 ")
                     body = body.replace("\n", "<br>")
                     
                     "<h3 style='color:#D81B60;'>$title</h3><br>$body"
