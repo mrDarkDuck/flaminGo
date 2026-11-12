@@ -486,7 +486,9 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val targetUrl = prefs.getString("list_url", defaultUrl) ?: defaultUrl
         val limit = prefs.getInt("check_limit", 0)
-        val maxPing = prefs.getInt("max_ping", 0)
+        
+        // ПО УМОЛЧАНИЮ 150 МС
+        val maxPing = prefs.getInt("max_ping", 150)
 
         prepareUiForCheck()
 
@@ -511,7 +513,9 @@ class MainActivity : AppCompatActivity() {
         val linksToRecheck = adapter.items.joinToString("\n") { it.link }
         
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-        val maxPing = prefs.getInt("max_ping", 0)
+        
+        // ПО УМОЛЧАНИЮ 150 МС
+        val maxPing = prefs.getInt("max_ping", 150)
 
         prepareUiForCheck()
 
@@ -548,7 +552,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-       private fun showSettingsDialog() {
+    private fun showSettingsDialog() {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val dialogView = layoutInflater.inflate(R.layout.dialog_settings, null)
         
@@ -778,7 +782,7 @@ class MainActivity : AppCompatActivity() {
         lastCheckText.text = "Проверка ($currentNetName): $dateStr"
     }
 
-        private fun loadSavedResult() {
+    private fun loadSavedResult() {
         val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val netId = getNetworkIdentifier()
         val currentNetName = getNetworkName()
@@ -812,3 +816,4 @@ class MainActivity : AppCompatActivity() {
         }
         recheckButton.isEnabled = adapter.items.isNotEmpty()
     }
+}
